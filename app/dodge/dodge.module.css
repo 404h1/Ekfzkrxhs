@@ -64,9 +64,13 @@
 }
 
 .progressTime {
-  font-size: 14px;
-  font-weight: 800;
-  color: rgba(200, 215, 245, 0.7);
+  font-size: 22px;
+  font-weight: 900;
+  color: rgba(220, 230, 255, 0.9);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.5px;
+  min-width: 80px;
+  text-shadow: 0 0 12px rgba(96, 165, 250, 0.4);
   min-width: 40px;
   text-align: center;
   font-variant-numeric: tabular-nums;
@@ -346,7 +350,7 @@
   .bottomBar { left: 12px; right: 12px; bottom: 12px; }
 
   .hudPill { padding: 6px 10px; font-size: 11px; }
-  .progressTime { font-size: 12px; }
+  .progressTime { font-size: 16px; min-width: 60px; }
   .bar { height: 4px; }
 
   .overlayCard, .modalCard { padding: 24px 20px; border-radius: 20px; }
@@ -375,7 +379,7 @@
   .topHud { left: 32px; right: 32px; top: 32px; }
   .bottomBar { left: 32px; right: 32px; bottom: 32px; }
   .hudPill { padding: 10px 20px; font-size: 15px; }
-  .progressTime { font-size: 16px; }
+  .progressTime { font-size: 26px; min-width: 100px; }
   .bar { height: 8px; }
   .overlayCard, .modalCard { padding: 48px 40px; }
   .heroTitle { font-size: 48px; }

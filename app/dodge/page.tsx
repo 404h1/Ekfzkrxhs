@@ -567,17 +567,18 @@ export default function DodgePage() {
   const updateDisplayedTime = (delta: number) => {
     const g = gs.current
     const target = getSessionTarget(g.currentRoute)
+    const cap = target - 0.001 // never reach exactly 60 or 30
     if (g.currentRoute !== 'error59') {
-      g.displayedTime = Math.min(target, g.time)
+      g.displayedTime = Math.min(cap, g.time)
       return
     }
     if (g.time < 20) {
-      g.displayedTime = g.time
+      g.displayedTime = Math.min(cap, g.time)
     } else {
       if (g.displayedTime < 20) g.displayedTime = 20
       const slowProgress = Math.min(1, (g.time - 20) / 12)
       const rate = 1 - 0.6 * Math.pow(slowProgress, 1.6)
-      g.displayedTime += delta * rate
+      g.displayedTime = Math.min(cap, g.displayedTime + delta * rate)
     }
     if ((g.displayedTime > 29.02 || g.time > 36) && !g.errorTriggered) {
       g.errorTriggered = true
@@ -1033,7 +1034,7 @@ export default function DodgePage() {
   const syncUI = useCallback(() => {
     const g = gs.current
     const target = getSessionTarget(g.currentRoute)
-    setUiTime(g.displayedTime.toFixed(2))
+    setUiTime(g.displayedTime.toFixed(3))
     setUiLevel(g.level)
     setUiProgress(Math.min(100, (g.displayedTime / target) * 100))
     setUiAttempts(g.attempts)
