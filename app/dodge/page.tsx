@@ -107,15 +107,25 @@ function generateRandomName(): string {
   return '#' + num + ' ' + prefix + ' ' + suffix
 }
 
+async function generateUniqueName(): Promise<string> {
+  try {
+    const res = await fetch('/api/scores/names')
+    if (!res.ok) return generateRandomName()
+    const existingNames: string[] = await res.json()
+    const nameSet = new Set(existingNames)
+    for (let i = 0; i < 100; i++) {
+      const candidate = generateRandomName()
+      if (!nameSet.has(candidate)) return candidate
+    }
+  } catch { /* fallback */ }
+  return generateRandomName()
+}
+
 function loadSavedName(): string {
   if (typeof window === 'undefined') return ''
   try {
-    const saved = localStorage.getItem(NAME_STORAGE_KEY)
-    if (saved) return saved
-    const name = generateRandomName()
-    localStorage.setItem(NAME_STORAGE_KEY, name)
-    return name
-  } catch { return generateRandomName() }
+    return localStorage.getItem(NAME_STORAGE_KEY) || ''
+  } catch { return '' }
 }
 
 function loadCollection(): string[] {
@@ -209,7 +219,15 @@ export default function DodgePage() {
   const [playerName, setPlayerName] = useState('')
 
   useEffect(() => {
-    setPlayerName(loadSavedName())
+    const saved = loadSavedName()
+    if (saved) {
+      setPlayerName(saved)
+    } else {
+      generateUniqueName().then((name) => {
+        setPlayerName(name)
+        localStorage.setItem(NAME_STORAGE_KEY, name)
+      })
+    }
   }, [])
 
   const fetchLeaderboard = useCallback(async () => {
@@ -1221,7 +1239,7 @@ export default function DodgePage() {
                 />
                 <button
                   className={s.rerollBtn}
-                  onClick={() => { const n = generateRandomName(); setPlayerName(n); localStorage.setItem(NAME_STORAGE_KEY, n) }}
+                  onClick={() => { generateUniqueName().then((n) => { setPlayerName(n); localStorage.setItem(NAME_STORAGE_KEY, n) }) }}
                   title="랜덤 닉네임"
                 >&#x1F3B2;</button>
               </div>
