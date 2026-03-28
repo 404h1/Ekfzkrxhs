@@ -11,18 +11,22 @@
   user-select: none;
 }
 
-/* ─── Canvas (fullscreen) ─────────────────────── */
+/* ─── Canvas (fullscreen, aspect-ratio preserved) */
 .canvasWrap {
   position: relative;
   width: 100%;
   height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .canvasWrap canvas {
-  width: 100%;
-  height: 100%;
   display: block;
   background: #020408;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 /* ─── Top HUD ─────────────────────────────────── */
@@ -344,26 +348,56 @@
 
 /* ─── Responsive ──────────────────────────────── */
 
-/* Mobile */
+/* Mobile portrait */
 @media (max-width: 640px) {
-  .topHud { left: 12px; right: 12px; top: 12px; gap: 8px; }
-  .bottomBar { left: 12px; right: 12px; bottom: 12px; }
+  .topHud { left: 8px; right: 8px; top: 8px; gap: 4px; }
+  .bottomBar { left: 8px; right: 8px; bottom: 8px; }
+  .hudGroup { gap: 4px; }
+  .hudPill { padding: 4px 8px; font-size: 10px; }
+  .progressTime { font-size: 14px; min-width: 50px; }
+  .progressRow { gap: 6px; }
+  .bar { height: 3px; }
 
-  .hudPill { padding: 6px 10px; font-size: 11px; }
-  .progressTime { font-size: 16px; min-width: 60px; }
-  .bar { height: 4px; }
+  .overlay, .modal { padding: 12px; }
+  .overlayCard, .modalCard { padding: 20px 16px; border-radius: 16px; width: min(420px, 95%); }
+  .heroTitle { font-size: 24px; margin-bottom: 8px; }
+  .heroSub { font-size: 12px; line-height: 1.5; }
+  .heroActions { gap: 6px; margin-top: 16px; }
+  .btn { padding: 10px 16px; font-size: 12px; border-radius: 10px; }
+  .footerNote { font-size: 10px; margin-top: 8px; }
 
-  .overlayCard, .modalCard { padding: 24px 20px; border-radius: 20px; }
-  .heroTitle { font-size: 28px; }
-  .heroSub { font-size: 13px; }
-  .btn { padding: 10px 20px; font-size: 13px; border-radius: 12px; }
+  .nameRow { max-width: 240px; }
+  .nameInput { padding: 8px 12px; font-size: 13px; }
+  .rerollBtn { width: 36px; height: 36px; font-size: 16px; }
 
-  .collectionModalCard { padding: 20px 16px; }
-  .collectionGrid { grid-template-columns: 1fr; gap: 8px; }
-  .endCard { padding: 12px; }
-  .endName { font-size: 14px; }
-  .endDesc { font-size: 11px; }
-  .title { font-size: 18px; }
+  .collectionModalCard { padding: 16px 12px; width: min(420px, 95%); }
+  .collectionGrid { grid-template-columns: 1fr; gap: 6px; }
+  .endCard { padding: 10px; }
+  .endName { font-size: 13px; }
+  .endDesc { font-size: 10px; }
+  .title { font-size: 16px; }
+  .sub { font-size: 11px; }
+
+  .leaderboardTable { max-height: 280px; }
+  .lbHeader, .lbRow { grid-template-columns: 30px 1fr 70px; gap: 4px; padding: 6px 8px; font-size: 12px; }
+
+  .errorTitle { font-size: 22px; }
+  .brightnessPreview { min-height: 80px; font-size: 11px; }
+}
+
+/* Mobile landscape */
+@media (max-height: 500px) and (orientation: landscape) {
+  .overlay, .modal { padding: 8px; }
+  .overlayCard, .modalCard { padding: 16px 20px; border-radius: 14px; }
+  .heroTitle { font-size: 22px; margin-bottom: 4px; }
+  .heroSub { font-size: 11px; }
+  .heroActions { margin-top: 8px; gap: 6px; }
+  .btn { padding: 8px 16px; font-size: 12px; }
+  .nameRow { margin: 2px auto 4px; }
+  .collectionModalCard { max-height: calc(100vh - 16px); }
+  .collectionGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
+  .endCard { padding: 8px; }
+  .leaderboardTable { max-height: 200px; }
 }
 
 /* Tablet */

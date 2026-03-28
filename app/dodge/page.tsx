@@ -1148,24 +1148,39 @@ export default function DodgePage() {
 
   // ─── Mouse / Touch ────────────────────────────────────
 
-  const onMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+  const canvasCoords = useCallback((clientX: number, clientY: number) => {
     const canvas = canvasRef.current
     if (!canvas) return
     const rect = canvas.getBoundingClientRect()
-    gs.current.mouseX = (e.clientX - rect.left) * (WIDTH / rect.width)
-    gs.current.mouseY = (e.clientY - rect.top) * (HEIGHT / rect.height)
+    // object-fit: contain — compute actual rendered area
+    const canvasAspect = WIDTH / HEIGHT
+    const rectAspect = rect.width / rect.height
+    let renderW: number, renderH: number, offsetX: number, offsetY: number
+    if (rectAspect > canvasAspect) {
+      renderH = rect.height
+      renderW = rect.height * canvasAspect
+      offsetX = (rect.width - renderW) / 2
+      offsetY = 0
+    } else {
+      renderW = rect.width
+      renderH = rect.width / canvasAspect
+      offsetX = 0
+      offsetY = (rect.height - renderH) / 2
+    }
+    gs.current.mouseX = ((clientX - rect.left - offsetX) / renderW) * WIDTH
+    gs.current.mouseY = ((clientY - rect.top - offsetY) / renderH) * HEIGHT
   }, [])
+
+  const onMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    canvasCoords(e.clientX, e.clientY)
+  }, [canvasCoords])
 
   const onTouchMove = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
     e.preventDefault()
     const touch = e.touches[0]
     if (!touch) return
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const rect = canvas.getBoundingClientRect()
-    gs.current.mouseX = (touch.clientX - rect.left) * (WIDTH / rect.width)
-    gs.current.mouseY = (touch.clientY - rect.top) * (HEIGHT / rect.height)
-  }, [])
+    canvasCoords(touch.clientX, touch.clientY)
+  }, [canvasCoords])
 
   // ─── Keyboard ──────────────────────────────────────────
 
