@@ -229,32 +229,83 @@ export default function DodgePage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animFrameRef = useRef<number>(0)
   const gs = useRef<GameState>(createInitialGameState())
-  const touchDragRef = useRef<{ active: boolean; offsetX: number; offsetY: number }>({
+  const dragRef = useRef<{ active: boolean; offsetX: number; offsetY: number }>({
     active: false,
     offsetX: 0,
     offsetY: 0,
   })
 
-  const getPlayBounds = useCallback(() => {
+  const getCanvasMetrics = useCallback(() => {
     const canvas = canvasRef.current
-    if (!canvas || typeof window === 'undefined') {
+    if (!canvas) return null
+
+    const rect = canvas.getBoundingClientRect()
+    const fit = getComputedStyle(canvas).objectFit || 'contain'
+    const canvasAspect = WIDTH / HEIGHT
+    const rectAspect = rect.width / rect.height
+    let renderW: number, renderH: number, offsetX: number, offsetY: number
+
+    if (fit === 'cover') {
+      if (rectAspect > canvasAspect) {
+        renderW = rect.width
+        renderH = rect.width / canvasAspect
+        offsetX = 0
+        offsetY = (rect.height - renderH) / 2
+      } else {
+        renderH = rect.height
+        renderW = rect.height * canvasAspect
+        offsetX = (rect.width - renderW) / 2
+        offsetY = 0
+      }
+    } else if (rectAspect > canvasAspect) {
+      renderH = rect.height
+      renderW = rect.height * canvasAspect
+      offsetX = (rect.width - renderW) / 2
+      offsetY = 0
+    } else {
+      renderW = rect.width
+      renderH = rect.width / canvasAspect
+      offsetX = 0
+      offsetY = (rect.height - renderH) / 2
+    }
+
+    return {
+      rect,
+      renderW,
+      renderH,
+      offsetX,
+      offsetY,
+    }
+  }, [])
+
+  const getPlayBounds = useCallback(() => {
+    const metrics = getCanvasMetrics()
+    if (!metrics || typeof window === 'undefined') {
       return { minX: 10, maxX: WIDTH - 10, minY: 10, maxY: HEIGHT - 10 }
     }
 
-    const rect = canvas.getBoundingClientRect()
-    const safeTopPx = window.innerWidth <= 640 ? 64 : 56
-    const safeBottomPx = window.innerWidth <= 640 ? 44 : 28
+    const { rect, renderW, renderH, offsetX, offsetY } = metrics
+    const safeTopPx = window.innerWidth <= 640 ? 72 : 56
+    const safeBottomPx = window.innerWidth <= 640 ? 52 : 28
     const safeSidePx = window.innerWidth <= 640 ? 12 : 20
-    const worldPerCssPxX = WIDTH / rect.width
-    const worldPerCssPxY = HEIGHT / rect.height
+
+    const leftCss = safeSidePx
+    const rightCss = rect.width - safeSidePx
+    const topCss = safeTopPx
+    const bottomCss = rect.height - safeBottomPx
+
+    const minX = ((leftCss - offsetX) / renderW) * WIDTH
+    const maxX = ((rightCss - offsetX) / renderW) * WIDTH
+    const minY = ((topCss - offsetY) / renderH) * HEIGHT
+    const maxY = ((bottomCss - offsetY) / renderH) * HEIGHT
 
     return {
-      minX: Math.max(10, safeSidePx * worldPerCssPxX),
-      maxX: Math.min(WIDTH - 10, WIDTH - safeSidePx * worldPerCssPxX),
-      minY: Math.max(10, safeTopPx * worldPerCssPxY),
-      maxY: Math.min(HEIGHT - 10, HEIGHT - safeBottomPx * worldPerCssPxY),
+      minX: Math.max(10, Math.min(WIDTH - 10, minX)),
+      maxX: Math.max(10, Math.min(WIDTH - 10, maxX)),
+      minY: Math.max(10, Math.min(HEIGHT - 10, minY)),
+      maxY: Math.max(10, Math.min(HEIGHT - 10, maxY)),
     }
-  }, [])
+  }, [getCanvasMetrics])
 
   const [phase, setPhase] = useState<Phase>('idle')
   const [collected, setCollected] = useState<string[]>([])
@@ -1293,7 +1344,7 @@ export default function DodgePage() {
     const point = getCanvasCoords(touch.clientX, touch.clientY)
     if (!point) return
     const g = gs.current
-    touchDragRef.current = {
+    dragRef.current = {
       active: true,
       offsetX: g.playerX - point.x,
       offsetY: g.playerY - point.y,
@@ -1306,7 +1357,7 @@ export default function DodgePage() {
     if (!touch) return
     const point = getCanvasCoords(touch.clientX, touch.clientY)
     if (!point) return
-    const drag = touchDragRef.current
+    const drag = dragRef.current
     const nextX = drag.active ? point.x + drag.offsetX : point.x
     const nextY = drag.active ? point.y + drag.offsetY : point.y
     gs.current.mouseX = Math.max(0, Math.min(WIDTH, nextX))
@@ -1314,7 +1365,41 @@ export default function DodgePage() {
   }, [getCanvasCoords])
 
   const onTouchEnd = useCallback(() => {
-    touchDragRef.current.active = false
+    dragRef.current.active = false
+  }, [])
+
+  const onPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.pointerType === 'mouse') return
+    e.preventDefault()
+    const point = getCanvasCoords(e.clientX, e.clientY)
+    if (!point) return
+    const g = gs.current
+    dragRef.current = {
+      active: true,
+      offsetX: g.playerX - point.x,
+      offsetY: g.playerY - point.y,
+    }
+    e.currentTarget.setPointerCapture?.(e.pointerId)
+  }, [getCanvasCoords])
+
+  const onPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.pointerType === 'mouse') {
+      canvasCoords(e.clientX, e.clientY)
+      return
+    }
+    e.preventDefault()
+    const point = getCanvasCoords(e.clientX, e.clientY)
+    if (!point) return
+    const drag = dragRef.current
+    const nextX = drag.active ? point.x + drag.offsetX : point.x
+    const nextY = drag.active ? point.y + drag.offsetY : point.y
+    gs.current.mouseX = Math.max(0, Math.min(WIDTH, nextX))
+    gs.current.mouseY = Math.max(0, Math.min(HEIGHT, nextY))
+  }, [canvasCoords, getCanvasCoords])
+
+  const onPointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    dragRef.current.active = false
+    e.currentTarget.releasePointerCapture?.(e.pointerId)
   }, [])
 
   // ─── Prevent mobile scroll/bounce on touch ────────────
@@ -1478,10 +1563,10 @@ export default function DodgePage() {
           width={WIDTH}
           height={HEIGHT}
           onMouseMove={onMouseMove}
-          onTouchStart={onTouchStart}
-          onTouchMove={onTouchMove}
-          onTouchEnd={onTouchEnd}
-          onTouchCancel={onTouchEnd}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
         />
 
         {/* Top HUD - only during play */}
