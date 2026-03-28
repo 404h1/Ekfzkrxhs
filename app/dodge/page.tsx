@@ -203,6 +203,11 @@ export default function DodgePage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animFrameRef = useRef<number>(0)
   const gs = useRef<GameState>(createInitialGameState())
+  const touchDragRef = useRef<{ active: boolean; offsetX: number; offsetY: number }>({
+    active: false,
+    offsetX: 0,
+    offsetY: 0,
+  })
 
   const [phase, setPhase] = useState<Phase>('idle')
   const [collected, setCollected] = useState<string[]>([])
@@ -1202,15 +1207,28 @@ export default function DodgePage() {
 
   // ─── Mouse / Touch ────────────────────────────────────
 
-  const canvasCoords = useCallback((clientX: number, clientY: number) => {
+  const getCanvasCoords = useCallback((clientX: number, clientY: number) => {
     const canvas = canvasRef.current
-    if (!canvas) return
+    if (!canvas) return null
     const rect = canvas.getBoundingClientRect()
     // object-fit: contain — compute actual rendered area
+    const fit = getComputedStyle(canvas).objectFit || 'contain'
     const canvasAspect = WIDTH / HEIGHT
     const rectAspect = rect.width / rect.height
     let renderW: number, renderH: number, offsetX: number, offsetY: number
-    if (rectAspect > canvasAspect) {
+    if (fit === 'cover') {
+      if (rectAspect > canvasAspect) {
+        renderW = rect.width
+        renderH = rect.width / canvasAspect
+        offsetX = 0
+        offsetY = (rect.height - renderH) / 2
+      } else {
+        renderH = rect.height
+        renderW = rect.height * canvasAspect
+        offsetX = (rect.width - renderW) / 2
+        offsetY = 0
+      }
+    } else if (rectAspect > canvasAspect) {
       renderH = rect.height
       renderW = rect.height * canvasAspect
       offsetX = (rect.width - renderW) / 2
@@ -1221,20 +1239,55 @@ export default function DodgePage() {
       offsetX = 0
       offsetY = (rect.height - renderH) / 2
     }
-    gs.current.mouseX = ((clientX - rect.left - offsetX) / renderW) * WIDTH
-    gs.current.mouseY = ((clientY - rect.top - offsetY) / renderH) * HEIGHT
+    const x = ((clientX - rect.left - offsetX) / renderW) * WIDTH
+    const y = ((clientY - rect.top - offsetY) / renderH) * HEIGHT
+    return {
+      x: Math.max(0, Math.min(WIDTH, x)),
+      y: Math.max(0, Math.min(HEIGHT, y)),
+    }
   }, [])
+
+  const canvasCoords = useCallback((clientX: number, clientY: number) => {
+    const point = getCanvasCoords(clientX, clientY)
+    if (!point) return
+    gs.current.mouseX = point.x
+    gs.current.mouseY = point.y
+  }, [getCanvasCoords])
 
   const onMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     canvasCoords(e.clientX, e.clientY)
   }, [canvasCoords])
 
+  const onTouchStart = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault()
+    const touch = e.touches[0]
+    if (!touch) return
+    const point = getCanvasCoords(touch.clientX, touch.clientY)
+    if (!point) return
+    const g = gs.current
+    touchDragRef.current = {
+      active: true,
+      offsetX: g.playerX - point.x,
+      offsetY: g.playerY - point.y,
+    }
+  }, [getCanvasCoords])
+
   const onTouchMove = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
     e.preventDefault()
     const touch = e.touches[0]
     if (!touch) return
-    canvasCoords(touch.clientX, touch.clientY)
-  }, [canvasCoords])
+    const point = getCanvasCoords(touch.clientX, touch.clientY)
+    if (!point) return
+    const drag = touchDragRef.current
+    const nextX = drag.active ? point.x + drag.offsetX : point.x
+    const nextY = drag.active ? point.y + drag.offsetY : point.y
+    gs.current.mouseX = Math.max(0, Math.min(WIDTH, nextX))
+    gs.current.mouseY = Math.max(0, Math.min(HEIGHT, nextY))
+  }, [getCanvasCoords])
+
+  const onTouchEnd = useCallback(() => {
+    touchDragRef.current.active = false
+  }, [])
 
   // ─── Prevent mobile scroll/bounce on touch ────────────
 
@@ -1388,7 +1441,16 @@ export default function DodgePage() {
   return (
     <div className={s.dodgeRoot}>
       <div className={s.canvasWrap}>
-        <canvas ref={canvasRef} width={WIDTH} height={HEIGHT} onMouseMove={onMouseMove} onTouchMove={onTouchMove} />
+        <canvas
+          ref={canvasRef}
+          width={WIDTH}
+          height={HEIGHT}
+          onMouseMove={onMouseMove}
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
+          onTouchCancel={onTouchEnd}
+        />
 
         {/* Top HUD - only during play */}
         {isPlaying && (
