@@ -1623,6 +1623,10 @@ export default function DodgePage() {
                     </div>
                     <div className={s.prizeExpiry}>유효기간: 2026.04.01 ~ 2026.04.01</div>
                   </div>
+                  <p className={s.footerNote} style={{ marginTop: 12, lineHeight: 1.6 }}>
+                    위 쿠폰 번호를 캡처해서 사용해주세요!<br />
+                    매장에서 바코드를 보여주시면 됩니다 😊
+                  </p>
                   <div className={s.heroActions}>
                     <button className={`${s.btn} ${s.primaryBtn}`} onClick={() => setRoulettePhase('reveal')}>쿠폰 사용하기</button>
                   </div>
