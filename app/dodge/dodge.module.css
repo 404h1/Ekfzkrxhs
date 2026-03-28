@@ -439,7 +439,7 @@
 }
 .lbHeader, .lbRow {
   display: grid;
-  grid-template-columns: 40px 1fr 90px 100px;
+  grid-template-columns: 40px 1fr 100px;
   gap: 8px;
   padding: 8px 12px;
   align-items: center;
@@ -462,7 +462,6 @@
 .lbRank { text-align: center; font-weight: 700; }
 .lbName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lbTime { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
-.lbRoute { text-align: center; font-size: 12px; color: rgba(148, 163, 184, 0.6); }
 .lbEmpty {
   text-align: center;
   padding: 32px;

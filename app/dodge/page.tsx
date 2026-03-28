@@ -30,7 +30,7 @@ interface Star {
 }
 
 interface ScoreEntry {
-  name: string; survival_time: number; route: string; ending: string; created_at: string
+  name: string; survival_time: number; created_at: string
 }
 
 interface GameState {
@@ -1325,8 +1325,7 @@ export default function DodgePage() {
               <div className={s.lbHeader}>
                 <span className={s.lbRank}>#</span>
                 <span className={s.lbName}>이름</span>
-                <span className={s.lbTime}>생존 시간</span>
-                <span className={s.lbRoute}>모드</span>
+                <span className={s.lbTime}>최고 생존</span>
               </div>
               {leaderboard.length === 0 && (
                 <div className={s.lbEmpty}>아직 아무도 안 죽었습니다. (거짓말)</div>
@@ -1336,7 +1335,6 @@ export default function DodgePage() {
                   <span className={s.lbRank}>{i + 1}</span>
                   <span className={s.lbName}>{entry.name}</span>
                   <span className={s.lbTime}>{Number(entry.survival_time).toFixed(2)}s</span>
-                  <span className={s.lbRoute}>{entry.route}</span>
                 </div>
               ))}
             </div>
