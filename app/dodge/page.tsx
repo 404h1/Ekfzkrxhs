@@ -7,7 +7,7 @@ import s from './dodge.module.css'
 
 type Route = 'normal' | 'instant' | 'hope' | 'pattern' | 'growth' | 'reward' | 'hudDrop' | 'drift' | 'darkness' | 'wall' | 'bigBullet' | 'error59'
 type PauseReason = 'none' | 'collection' | 'brightness'
-type Phase = 'idle' | 'playing' | 'result' | 'error' | 'brightness' | 'collection'
+type Phase = 'idle' | 'playing' | 'result' | 'error' | 'brightness' | 'collection' | 'leaderboard'
 
 interface Bullet {
   x: number; y: number; vx: number; vy: number; r: number; color: string
@@ -20,11 +20,28 @@ interface EndingData {
   id: string; name: string; description: string; unlockHint: string
 }
 
+interface Particle {
+  x: number; y: number; vx: number; vy: number; life: number; maxLife: number
+  r: number; color: string
+}
+
+interface Star {
+  x: number; y: number; size: number; speed: number; brightness: number
+}
+
+interface ScoreEntry {
+  name: string; survival_time: number; route: string; ending: string; created_at: string
+}
+
 interface GameState {
   running: boolean; attempts: number
   mouseX: number; mouseY: number; playerX: number; playerY: number; playerRadius: number
   time: number; displayedTime: number; level: number
-  bullets: Bullet[]; particles: never[]
+  bullets: Bullet[]; particles: Particle[]
+  trail: { x: number; y: number; alpha: number }[]
+  stars: Star[]
+  nearMissTimer: number
+  shakeX: number; shakeY: number
   currentRoute: Route; lastTimestamp: number
   darknessAlpha: number; paused: boolean; pauseReason: PauseReason
   darknessAdjusted: boolean; darknessPauseTriggered: boolean
@@ -47,25 +64,59 @@ const SURVIVAL_TARGET = 60
 const ROUTES: Route[] = ['normal', 'instant', 'hope', 'pattern', 'growth', 'reward', 'hudDrop', 'drift', 'darkness', 'wall', 'bigBullet', 'error59']
 
 const ENDINGS: Record<string, EndingData> = {
-  normalFail: { id: 'END 00', name: '정상 플레이', description: '총알은 늘고 속도는 빨라졌습니다. 이 게임이 가장 정상적인 얼굴을 하고 있던 기록입니다.', unlockHint: '미확인' },
-  instant: { id: 'END 01', name: '시작하자마자 사망', description: '당신은 게임을 시작했습니다. 그리고 끝났습니다.', unlockHint: '미확인' },
-  hope: { id: 'END 02', name: '어? 할만한데?', description: '당신은 희망을 느꼈습니다. 그게 문제였습니다.', unlockHint: '미확인' },
-  pattern: { id: 'END 03', name: '이제 이해했다', description: '이해한 순간, 게임은 당신을 이해했습니다.', unlockHint: '미확인' },
-  growth: { id: 'END 04', name: '크기 증가', description: '몸집은 조금씩 커졌고, 마지막엔 회피라는 말이 예의가 아니게 됐습니다.', unlockHint: '미확인' },
-  error59: { id: 'END 05', name: '시간의 함정', description: '시간은 흐르지 않습니다. 당신만 늙습니다.', unlockHint: '미확인' },
-  reward: { id: 'END 06', name: '시스템 오류', description: '버그가 아니라 기능입니다.', unlockHint: '미확인' },
-  hudDrop: { id: 'END 11', name: '인터페이스 낙하', description: '시간, 레벨, 상태 표시는 안내가 아니라 낙하물이었다.', unlockHint: '미확인' },
-  drift: { id: 'END 07', name: '입력 이탈', description: '포인터는 멀쩡했지만, 기체가 당신의 의도를 끝까지 따라오진 않았습니다.', unlockHint: '미확인' },
-  darkness: { id: 'END 08', name: '시야 암전', description: '밝기를 올렸습니다. 어둠도 같이 올라왔습니다.', unlockHint: '미확인' },
-  wall: { id: 'END 09', name: '여긴 안전합니다 (아님)', description: '안전지대는 있었습니다. 당신이 들어간 직후 없어졌을 뿐입니다.', unlockHint: '미확인' },
-  bigBullet: { id: 'END 10', name: '대형 탄환', description: '처음엔 피할 수 있어 보였습니다. 그 한 발이 남은 공간까지 먹어치우기 전까지는요.', unlockHint: '미확인' },
-  fakeFinal: { id: 'END 99', name: '완전 생존', description: '모든 기록을 확보한 뒤 무피격으로 60초를 완주하면 해금된다고 알려진 최종 생존 기록입니다.', unlockHint: '모든 기록 수집 후 무피격 60초 생존' },
+  normalFail: { id: 'END 00', name: '평범한 죽음', description: '축하합니다. 가장 재미없는 방법으로 죽었습니다. 이것도 재능입니다.', unlockHint: '미확인' },
+  instant: { id: 'END 01', name: '속도의 신', description: '시작 버튼을 누른 게 유일한 조작이었습니다. 스피드런 세계 기록 축하드려요.', unlockHint: '미확인' },
+  hope: { id: 'END 02', name: '희망은 독입니다', description: '"이거 할 만한데?" 라고 생각한 순간이 정확히 사망 원인이었습니다.', unlockHint: '미확인' },
+  pattern: { id: 'END 03', name: '공부는 배신한다', description: '패턴을 외웠죠? 게임도 당신을 외웠습니다.', unlockHint: '미확인' },
+  growth: { id: 'END 04', name: '다이어트 실패', description: '좀 뚱뚱해진 건 기분 탓입니다. (아닙니다)', unlockHint: '미확인' },
+  error59: { id: 'END 05', name: '시간은 돈이다 (거짓말)', description: '30초만 버티면 된다고 했죠? 만우절인데 왜 믿었어요?', unlockHint: '미확인' },
+  reward: { id: 'END 06', name: '버그 아님 (거짓말)', description: '축하합니다! 버그를 발견하셨습니다! ...라고 할 뻔했죠?', unlockHint: '미확인' },
+  hudDrop: { id: 'END 11', name: 'UI도 적이었다', description: 'HUD가 떨어지는 건 버그가 아니라 기능입니다. 진짜로요.', unlockHint: '미확인' },
+  drift: { id: 'END 07', name: '손이 문제가 아님', description: '마우스는 정상입니다. 기체가 말을 안 듣는 건 사양입니다.', unlockHint: '미확인' },
+  darkness: { id: 'END 08', name: '전기세 절약', description: '밝기를 올렸습니다. 어둠이 더 열심히 일하기 시작했습니다.', unlockHint: '미확인' },
+  wall: { id: 'END 09', name: '안전지대 (웃음)', description: '"여기 안전하네!" 라고 생각한 0.3초가 참 행복했을 겁니다.', unlockHint: '미확인' },
+  bigBullet: { id: 'END 10', name: '그건 좀 크지 않나', description: '작은 총알은 피했는데 화면 절반을 먹는 건 좀 억울하죠?', unlockHint: '미확인' },
+  fakeFinal: { id: 'END 99', name: '진짜 엔딩 (아마도)', description: '이 엔딩은 실제로 존재합니다. 아마도요. 만우절이니까 모르겠네요.', unlockHint: '모든 기록 수집 후 무피격 60초 생존' },
 }
 
 const COLLECTION_ORDER = ['normalFail', 'instant', 'hope', 'pattern', 'growth', 'error59', 'reward', 'hudDrop', 'drift', 'darkness', 'wall', 'bigBullet', 'fakeFinal']
 const TOTAL_VISIBLE_COLLECTION = 12
 
 // ─── Helpers ─────────────────────────────────────────────
+
+const NAME_STORAGE_KEY = 'april_fools_dodge_name_v1'
+const PREFIXES = [
+  '도망자', '생존자', '용감한', '무모한', '불쌍한', '희망찬', '절망의', '전설의', '평범한', '운 좋은',
+  '운 나쁜', '겁 많은', '당당한', '몽롱한', '허무한', '화난', '졸린', '배고픈', '심심한', '외로운',
+  '신나는', '슬픈', '멍때린', '까칠한', '순수한', '엉뚱한', '느긋한', '급한', '소심한', '대담한',
+  '미스터', '미세스', '꼬마', '거대한', '투명한', '반짝이는', '어두운', '빛나는', '축축한', '건조한',
+  '떨리는', '흔들리는', '미끄러진', '날아간', '굴러온', '숨은', '뛰쳐나온', '방황하는', '질주하는', '기어가는',
+]
+const SUFFIXES = [
+  '감자', '고양이', '토끼', '햄스터', '펭귄', '오리', '두부', '떡볶이', '김밥', '라면',
+  '치킨', '탕후루', '붕어빵', '호떡', '만두', '초코파이', '젤리곰', '솜사탕', '마카롱', '푸딩',
+  '강아지', '다람쥐', '수달', '알파카', '카피바라', '너구리', '고슴도치', '미어캣', '판다', '코알라',
+  '피자', '타코', '도넛', '와플', '크레페', '쿠키', '브라우니', '케이크', '빵', '국밥',
+  '짬뽕', '우동', '곱창', '족발', '순대', '어묵', '핫도그', '감자튀김', '팝콘', '아이스크림',
+]
+
+function generateRandomName(): string {
+  const num = Math.floor(Math.random() * 9000) + 1000
+  const prefix = PREFIXES[Math.floor(Math.random() * PREFIXES.length)]
+  const suffix = SUFFIXES[Math.floor(Math.random() * SUFFIXES.length)]
+  return '#' + num + ' ' + prefix + ' ' + suffix
+}
+
+function loadSavedName(): string {
+  if (typeof window === 'undefined') return ''
+  try {
+    const saved = localStorage.getItem(NAME_STORAGE_KEY)
+    if (saved) return saved
+    const name = generateRandomName()
+    localStorage.setItem(NAME_STORAGE_KEY, name)
+    return name
+  } catch { return generateRandomName() }
+}
 
 function loadCollection(): string[] {
   if (typeof window === 'undefined') return []
@@ -81,9 +132,9 @@ function saveCollection(collected: string[]) {
 
 function publicRouteLabel(route: Route): string {
   const labels: Record<Route, string> = {
-    normal: '기본 패턴', instant: '즉발 패턴', hope: '희망 패턴', pattern: '학습 패턴',
-    growth: '성장 패턴', reward: '오류 창 패턴', hudDrop: 'UI 낙하 패턴', bigBullet: '대형 탄환 패턴',
-    drift: '입력 오차 패턴', darkness: '암전 패턴', wall: '안전지대 패턴', error59: '시간 단축 패턴',
+    normal: '평범한 지옥', instant: '깜짝 파티', hope: '희망 고문', pattern: '공부의 배신',
+    growth: '다이어트 실패', reward: '가짜 버그', hudDrop: 'UI의 반란', bigBullet: '대왕 총알',
+    drift: '손 탓 아님', darkness: '전기세 절약', wall: '안전 (웃음)', error59: '시간은 거짓말',
   }
   return labels[route] || '대기'
 }
@@ -101,12 +152,27 @@ function getCollectedCount(collected: string[]): number {
   return collected.filter((k) => k !== 'fakeFinal').length
 }
 
+function createStars(): Star[] {
+  const stars: Star[] = []
+  for (let i = 0; i < 120; i++) {
+    stars.push({
+      x: Math.random() * WIDTH,
+      y: Math.random() * HEIGHT,
+      size: Math.random() * 2 + 0.5,
+      speed: Math.random() * 30 + 5,
+      brightness: Math.random() * 0.6 + 0.2,
+    })
+  }
+  return stars
+}
+
 function createInitialGameState(): GameState {
   return {
     running: false, attempts: 0,
     mouseX: WIDTH / 2, mouseY: HEIGHT / 2, playerX: WIDTH / 2, playerY: HEIGHT / 2, playerRadius: 10,
     time: 0, displayedTime: 0, level: 1,
-    bullets: [], particles: [],
+    bullets: [], particles: [], trail: [], stars: createStars(),
+    nearMissTimer: 0, shakeX: 0, shakeY: 0,
     currentRoute: 'normal', lastTimestamp: 0,
     darknessAlpha: 0, paused: false, pauseReason: 'none',
     darknessAdjusted: false, darknessPauseTriggered: false,
@@ -130,15 +196,39 @@ export default function DodgePage() {
 
   const [phase, setPhase] = useState<Phase>('idle')
   const [collected, setCollected] = useState<string[]>([])
-  const [uiMessage, setUiMessage] = useState('포인터를 이동해 기체를 제어하세요. 시작 후 난도가 점진적으로 상승합니다.')
+  const [uiMessage, setUiMessage] = useState('살아남으세요. 그게 전부입니다. (아마도)')
   const [uiTime, setUiTime] = useState('0.00')
   const [uiLevel, setUiLevel] = useState(1)
   const [uiProgress, setUiProgress] = useState(0)
   const [uiAttempts, setUiAttempts] = useState(0)
   const [uiRoute, setUiRoute] = useState<Route>('normal')
-  const [uiHudHint, setUiHudHint] = useState('마우스로 이동')
+  const [uiHudHint, setUiHudHint] = useState('살아남으세요')
   const [uiHudOpacity, setUiHudOpacity] = useState(1)
   const [resultInfo, setResultInfo] = useState<{ title: string; description: string; footer: string } | null>(null)
+  const [leaderboard, setLeaderboard] = useState<ScoreEntry[]>([])
+  const [playerName, setPlayerName] = useState('')
+
+  useEffect(() => {
+    setPlayerName(loadSavedName())
+  }, [])
+
+  const fetchLeaderboard = useCallback(async () => {
+    try {
+      const res = await fetch('/api/scores')
+      if (res.ok) setLeaderboard(await res.json())
+    } catch { /* ignore */ }
+  }, [])
+
+  const saveScore = useCallback(async (survivalTime: number, route: string, ending: string) => {
+    const name = playerName || '???'
+    try {
+      await fetch('/api/scores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, survival_time: survivalTime, route, ending }),
+      })
+    } catch { /* ignore */ }
+  }, [playerName])
 
   useEffect(() => {
     const c = loadCollection()
@@ -164,16 +254,32 @@ export default function DodgePage() {
   }
 
   const drawBackground = (ctx: CanvasRenderingContext2D) => {
+    const g = gs.current
     ctx.clearRect(0, 0, WIDTH, HEIGHT)
     const gradient = ctx.createLinearGradient(0, 0, 0, HEIGHT)
-    gradient.addColorStop(0, '#0f172a')
-    gradient.addColorStop(1, '#020617')
+    gradient.addColorStop(0, '#0a0f1e')
+    gradient.addColorStop(0.5, '#070b16')
+    gradient.addColorStop(1, '#020408')
     ctx.fillStyle = gradient
     ctx.fillRect(0, 0, WIDTH, HEIGHT)
+    // Animated stars
+    for (const star of g.stars) {
+      const twinkle = 0.5 + Math.sin(g.time * 2 + star.x * 0.01) * 0.3
+      ctx.save()
+      ctx.globalAlpha = star.brightness * twinkle
+      ctx.fillStyle = '#c4d5f0'
+      ctx.beginPath()
+      ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.restore()
+    }
+    // Subtle grid
     ctx.save()
-    ctx.globalAlpha = 0.08
-    for (let x = 0; x < WIDTH; x += 40) { ctx.fillStyle = '#e2e8f0'; ctx.fillRect(x, 0, 1, HEIGHT) }
-    for (let y = 0; y < HEIGHT; y += 40) { ctx.fillRect(0, y, WIDTH, 1) }
+    ctx.globalAlpha = 0.04
+    ctx.strokeStyle = '#4a6fa5'
+    ctx.lineWidth = 0.5
+    for (let x = 0; x < WIDTH; x += 60) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, HEIGHT); ctx.stroke() }
+    for (let y = 0; y < HEIGHT; y += 60) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(WIDTH, y); ctx.stroke() }
     ctx.restore()
   }
 
@@ -198,14 +304,30 @@ export default function DodgePage() {
         ctx.restore()
         continue
       }
+      // Glow effect
+      ctx.save()
+      ctx.shadowColor = bullet.color
+      ctx.shadowBlur = 12 + (bullet.growth ? 20 : 0)
       ctx.beginPath()
       ctx.fillStyle = bullet.color
       ctx.arc(bullet.x, bullet.y, bullet.r, 0, Math.PI * 2)
       ctx.fill()
+      ctx.restore()
+      // Outer ring
+      ctx.save()
+      ctx.globalAlpha = 0.25
+      ctx.strokeStyle = bullet.color
+      ctx.lineWidth = 1.5
+      ctx.beginPath()
+      ctx.arc(bullet.x, bullet.y, bullet.r + 4, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.restore()
       if (bullet.growth) {
         ctx.save()
-        ctx.strokeStyle = 'rgba(254, 202, 202, 0.45)'
-        ctx.lineWidth = 8
+        ctx.strokeStyle = 'rgba(254, 202, 202, 0.5)'
+        ctx.lineWidth = 6
+        ctx.shadowColor = 'rgba(251,113,133,0.6)'
+        ctx.shadowBlur = 20
         ctx.beginPath()
         ctx.arc(bullet.x, bullet.y, bullet.r + 18, 0, Math.PI * 2)
         ctx.stroke()
@@ -214,17 +336,59 @@ export default function DodgePage() {
     }
   }
 
+  const drawParticles = (ctx: CanvasRenderingContext2D) => {
+    const g = gs.current
+    for (const p of g.particles) {
+      const life = p.life / p.maxLife
+      ctx.save()
+      ctx.globalAlpha = life * 0.8
+      ctx.fillStyle = p.color
+      ctx.shadowColor = p.color
+      ctx.shadowBlur = 6
+      ctx.beginPath()
+      ctx.arc(p.x, p.y, p.r * life, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.restore()
+    }
+  }
+
   const drawPlayer = (ctx: CanvasRenderingContext2D) => {
     const g = gs.current
+    // Draw trail
+    for (let i = 0; i < g.trail.length; i++) {
+      const t = g.trail[i]
+      ctx.save()
+      ctx.globalAlpha = t.alpha * 0.4
+      ctx.fillStyle = '#60a5fa'
+      ctx.beginPath()
+      ctx.arc(t.x, t.y, g.playerRadius * (0.3 + t.alpha * 0.5), 0, Math.PI * 2)
+      ctx.fill()
+      ctx.restore()
+    }
+    // Outer pulse ring
+    const pulse = Math.sin(g.time * 4) * 3
+    ctx.save()
+    ctx.strokeStyle = g.nearMissTimer > 0 ? 'rgba(251,191,36,0.7)' : 'rgba(96,165,250,0.5)'
+    ctx.lineWidth = 2
+    ctx.shadowColor = g.nearMissTimer > 0 ? '#fbbf24' : '#60a5fa'
+    ctx.shadowBlur = 15
     ctx.beginPath()
-    ctx.fillStyle = '#f8fafc'
+    ctx.arc(g.playerX, g.playerY, g.playerRadius + 10 + pulse, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.restore()
+    // Inner glow
+    ctx.save()
+    ctx.shadowColor = '#60a5fa'
+    ctx.shadowBlur = 20
+    const playerGrad = ctx.createRadialGradient(g.playerX, g.playerY, 0, g.playerX, g.playerY, g.playerRadius)
+    playerGrad.addColorStop(0, '#ffffff')
+    playerGrad.addColorStop(0.6, '#e0eaff')
+    playerGrad.addColorStop(1, '#60a5fa')
+    ctx.fillStyle = playerGrad
+    ctx.beginPath()
     ctx.arc(g.playerX, g.playerY, g.playerRadius, 0, Math.PI * 2)
     ctx.fill()
-    ctx.beginPath()
-    ctx.strokeStyle = 'rgba(96,165,250,0.9)'
-    ctx.lineWidth = 3
-    ctx.arc(g.playerX, g.playerY, g.playerRadius + 7, 0, Math.PI * 2)
-    ctx.stroke()
+    ctx.restore()
   }
 
   const drawDarkness = (ctx: CanvasRenderingContext2D) => {
@@ -293,22 +457,12 @@ export default function DodgePage() {
     ctx.fillText('SYSTEM ERROR', WIDTH / 2, y + 82)
     ctx.fillStyle = 'rgba(15,23,42,0.66)'
     ctx.font = '700 24px Arial'
-    ctx.fillText('치명적이지 않은 오류를 처리하는 중입니다', WIDTH / 2, y + 132)
+    ctx.fillText('이 오류는 진짜입니다 (아마도)', WIDTH / 2, y + 132)
     ctx.fillStyle = 'rgba(251,191,36,0.28)'
     ctx.fillRect(WIDTH / 2 - 180, y + 160, 360, 42)
     ctx.fillStyle = 'rgba(15,23,42,0.75)'
     ctx.font = '800 20px Arial'
-    ctx.fillText('복구 중...', WIDTH / 2, y + 188)
-    ctx.restore()
-  }
-
-  const drawTextGuide = (ctx: CanvasRenderingContext2D) => {
-    const g = gs.current
-    ctx.save()
-    ctx.fillStyle = 'rgba(148,163,184,0.16)'
-    ctx.font = 'bold 74px Arial'
-    ctx.textAlign = 'center'
-    ctx.fillText(publicRouteLabel(g.currentRoute), WIDTH / 2, HEIGHT / 2 + 26)
+    ctx.fillText('복구 중... (거짓말)', WIDTH / 2, y + 188)
     ctx.restore()
   }
 
@@ -317,13 +471,17 @@ export default function DodgePage() {
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
+    const g = gs.current
+    ctx.save()
+    ctx.translate(g.shakeX, g.shakeY)
     drawBackground(ctx)
-    drawTextGuide(ctx)
     drawBullets(ctx)
+    drawParticles(ctx)
     drawDriftGuide(ctx)
     drawPlayer(ctx)
     drawDarkness(ctx)
     drawRewardBanner(ctx)
+    ctx.restore()
   }, [])
 
   // ─── Game logic ────────────────────────────────────────
@@ -407,7 +565,7 @@ export default function DodgePage() {
       g.errorTriggered = true
       g.running = false
       setPhase('error')
-      setUiMessage('시간 데이터 예외가 감지되었습니다. 세션을 정리하는 중입니다.')
+      setUiMessage('시간이 멈춘 건 버그가 아닙니다. 당신만 늙고 있을 뿐이에요.')
     }
   }
 
@@ -432,6 +590,60 @@ export default function DodgePage() {
     g.playerY += (target.y - g.playerY) * lerp
     g.playerX = Math.max(g.playerRadius, Math.min(WIDTH - g.playerRadius, g.playerX))
     g.playerY = Math.max(g.playerRadius, Math.min(HEIGHT - g.playerRadius, g.playerY))
+    // Trail
+    g.trail.unshift({ x: g.playerX, y: g.playerY, alpha: 1 })
+    if (g.trail.length > 12) g.trail.pop()
+    for (const t of g.trail) t.alpha *= 0.85
+  }
+
+  const updateStars = (delta: number) => {
+    const g = gs.current
+    for (const star of g.stars) {
+      star.y += star.speed * delta
+      if (star.y > HEIGHT) { star.y = -2; star.x = Math.random() * WIDTH }
+    }
+  }
+
+  const updateParticles = (delta: number) => {
+    const g = gs.current
+    for (const p of g.particles) {
+      p.x += p.vx * delta
+      p.y += p.vy * delta
+      p.life -= delta
+    }
+    g.particles = g.particles.filter(p => p.life > 0)
+  }
+
+  const checkNearMiss = (delta: number) => {
+    const g = gs.current
+    g.nearMissTimer = Math.max(0, g.nearMissTimer - delta)
+    g.shakeX *= 0.85; g.shakeY *= 0.85
+    for (const bullet of g.bullets) {
+      if (bullet.kind === 'hudDrop') continue
+      const dx = bullet.x - g.playerX
+      const dy = bullet.y - g.playerY
+      const dist = Math.hypot(dx, dy)
+      const threshold = bullet.r + g.playerRadius + 20
+      if (dist < threshold && dist > bullet.r + g.playerRadius) {
+        g.nearMissTimer = 0.3
+        // Spawn spark particles
+        for (let i = 0; i < 3; i++) {
+          const angle = Math.random() * Math.PI * 2
+          g.particles.push({
+            x: g.playerX + Math.cos(angle) * (g.playerRadius + 5),
+            y: g.playerY + Math.sin(angle) * (g.playerRadius + 5),
+            vx: Math.cos(angle) * (80 + Math.random() * 60),
+            vy: Math.sin(angle) * (80 + Math.random() * 60),
+            life: 0.4, maxLife: 0.4,
+            r: 2 + Math.random() * 2,
+            color: '#fbbf24',
+          })
+        }
+        g.shakeX = (Math.random() - 0.5) * 4
+        g.shakeY = (Math.random() - 0.5) * 4
+        break
+      }
+    }
   }
 
   const getTriggeredEndingKey = (): string | null => {
@@ -465,12 +677,13 @@ export default function DodgePage() {
     setResultInfo({
       title,
       description,
-      footer: isNew ? '획득한 결과는 보관함에 자동 저장됩니다.' : '이미 보유한 기록입니다. 새 해금은 없습니다.',
+      footer: isNew ? '새로운 사망 방법을 수집했습니다! (축하해야 하나?)' : '같은 방법으로 또 죽었네요. 학습 능력이 의심됩니다.',
     })
     setUiMessage(isNew
-      ? title + ' 기록이 저장되었습니다. 다른 패턴에서도 결과를 확인해 보세요.'
-      : title + ' 기록은 이미 보유 중입니다.')
-  }, [])
+      ? '새 엔딩 발견! ' + title + ' — 다른 죽는 법도 찾아보세요.'
+      : title + ' — 이미 겪어본 죽음입니다. 기억력이 걱정되네요.')
+    saveScore(g.displayedTime, g.currentRoute, key)
+  }, [saveScore])
 
   const endRunByKey = useCallback((key: string) => {
     const data = ENDINGS[key]
@@ -490,7 +703,8 @@ export default function DodgePage() {
       footer: footerText || '이번 세션은 참고 기록으로만 종료되었습니다.',
     })
     setUiMessage(messageTextValue || '60초 도달로 세션이 종료되었습니다. 다음 패턴에서 다른 기록을 확인해 보세요.')
-  }, [])
+    saveScore(g.displayedTime, g.currentRoute, 'survived')
+  }, [saveScore])
 
   const hitTest = useCallback(() => {
     const g = gs.current
@@ -526,9 +740,9 @@ export default function DodgePage() {
     if (g.currentRoute === 'normal') { spawnNormalPattern(delta); return }
 
     if (g.currentRoute === 'instant') {
-      if (g.time < 0.7) setUiHudHint('시작 신호 대기 중')
-      else if (g.time < 1.05) setUiHudHint('초기 패턴이 즉시 주입됩니다')
-      else setUiHudHint('회피 경로가 열리기 전에 닫힙니다')
+      if (g.time < 0.7) setUiHudHint('잠깐만요 준비 중...')
+      else if (g.time < 1.05) setUiHudHint('거짓말이었습니다')
+      else setUiHudHint('이미 늦었습니다 ㅎㅎ')
       if (g.time > 0.92 && !g.instantTriggered) {
         g.instantTriggered = true
         const targetX = Math.max(160, Math.min(WIDTH - 160, g.playerX))
@@ -541,13 +755,13 @@ export default function DodgePage() {
 
     if (g.currentRoute === 'hope') {
       spawnNormalPattern(delta * (g.time < 12.8 ? 0.46 : g.time < 15 ? 0.12 : 0.08))
-      if (g.time < 9.6) setUiHudHint('밀도가 낮게 유지됩니다')
-      else if (g.time < 12.8) setUiHudHint('이 정도면 끝까지 갈 수 있어 보입니다')
-      else if (g.time < 15.1) setUiHudHint('거의 다 정리된 것처럼 보입니다')
-      else setUiHudHint('안쪽에서 닫히는 패턴이 시작됩니다')
+      if (g.time < 9.6) setUiHudHint('오 이거 쉬운데?')
+      else if (g.time < 12.8) setUiHudHint('이제 쉬워지는 것 같죠?')
+      else if (g.time < 15.1) setUiHudHint('네 맞아요 쉬워지고 있어요 (거짓말)')
+      else setUiHudHint('ㅋㅋㅋㅋㅋㅋ')
       if (g.time > 12.9 && g.hopeTrapPhase === 0) {
         g.hopeTrapPhase = 1
-        setUiMessage('패턴이 안정화되었습니다. 이 흐름이면 끝까지 갈 수 있습니다.')
+        setUiMessage('이대로면 클리어할 수 있을 것 같아요! (개발자 웃음)')
       }
       if (g.time > 15.1 && g.hopeTrapPhase === 1) {
         g.hopeTrapPhase = 2
@@ -571,7 +785,7 @@ export default function DodgePage() {
       const wave = Math.floor((g.time - 2.4) / 2.75)
       if (wave < 0) spawnNormalPattern(delta * 0.1)
       if (wave > 4) spawnNormalPattern(delta * 0.12)
-      setUiHudHint(wave < 1 ? '반복 패턴 분석 중' : wave < 4 ? '같은 구조가 다시 나옵니다' : '방금 외운 경로를 그대로 유지하세요')
+      setUiHudHint(wave < 1 ? '이 패턴 외우세요' : wave < 4 ? '같은 패턴이에요 믿으세요' : '외운 길로 가세요 (절대 가지 마세요)')
       if (wave >= 0 && wave < 5 && wave !== g.patternWaveIndex) {
         g.patternWaveIndex = wave
         const betrayed = wave === 4
@@ -587,13 +801,13 @@ export default function DodgePage() {
             spawnBullet(WIDTH / 2, HEIGHT / 2, Math.cos(angle) * speed, Math.sin(angle) * speed, radius, 'rgba(125,211,252,0.95)')
           }
         }
-        if (wave === 2) setUiMessage('반복 패턴 분석 완료. 이제 보입니다.')
+        if (wave === 2) setUiMessage('보이시죠? 이제 다 외웠죠? 좋아요 좋아요~')
         if (betrayed) {
           const rememberedAngle = ((4 + 1.5) / 20) * Math.PI * 2
           for (const speed of [250, 340, 430]) {
             spawnBullet(WIDTH / 2, HEIGHT / 2, Math.cos(rememberedAngle) * speed, Math.sin(rememberedAngle) * speed, 10, 'rgba(251,113,133,0.98)')
           }
-          setUiMessage('방금 외운 길이 마지막 한 번 바뀝니다.')
+          setUiMessage('아 참, 마지막 판은 좀 다릅니다. 만우절이거든요.')
         }
       }
       return
@@ -601,12 +815,12 @@ export default function DodgePage() {
 
     if (g.currentRoute === 'hudDrop') {
       spawnNormalPattern(delta * (g.time < 8.2 ? 0.3 : g.time < 13 ? 0.12 : 0.08))
-      if (g.time < 7.8) setUiHudHint('상단 인터페이스 동기화 중')
-      else if (g.time < 10.4) setUiHudHint('상단 인터페이스가 흔들립니다')
-      else setUiHudHint('표시 요소가 아래로 떨어집니다')
+      if (g.time < 7.8) setUiHudHint('UI가 좀 불안해 보이는 건 기분 탓')
+      else if (g.time < 10.4) setUiHudHint('UI가 흔들리는 건 지진 때문입니다')
+      else setUiHudHint('UI도 적이 될 수 있다는 걸 배우세요')
       if (g.time > 7.9 && !g.hudDropWarningShown) {
         g.hudDropWarningShown = true
-        setUiMessage('상단 인터페이스 고정이 풀리기 시작합니다.')
+        setUiMessage('위에 있는 거 떨어져요. 머리 조심하세요~')
       }
       const wave = Math.floor((g.time - 8.2) / 0.72)
       if (wave >= 0 && wave < 10 && wave !== g.hudDropWave) {
@@ -629,14 +843,14 @@ export default function DodgePage() {
     }
 
     if (g.currentRoute === 'bigBullet') {
-      if (g.time < 4.8) { spawnNormalPattern(delta * 0.72); setUiHudHint('전방 반응이 커지고 있습니다') }
+      if (g.time < 4.8) { spawnNormalPattern(delta * 0.72); setUiHudHint('뭔가 큰 게 오고 있어요') }
       if (g.time > 4.8 && !g.bigBulletWarningShown) {
         g.bigBulletWarningShown = true
-        setUiMessage('전방에서 대형 반응이 감지되었습니다. 회피 경로를 재조정하세요.')
+        setUiMessage('뒤를 돌아보지 마세요. (이미 늦었지만)')
       }
-      if (g.time > 4.8 && g.time < 5.6) setUiHudHint('대형 객체 접근 경고')
-      else if (g.time >= 5.6 && g.time < 6.5) setUiHudHint('생각보다 훨씬 빠르게 커집니다')
-      else if (g.time >= 6.5) setUiHudHint('남은 탈출 경로까지 닫히기 시작합니다')
+      if (g.time > 4.8 && g.time < 5.6) setUiHudHint('...진짜 큽니다')
+      else if (g.time >= 5.6 && g.time < 6.5) setUiHudHint('이건 좀 너무하지 않나요?')
+      else if (g.time >= 6.5) setUiHudHint('도망칠 곳이 없어지고 있습니다 ㅎㅎ')
       if (g.time > 5.4 && !g.bigBulletSpawned) {
         g.bigBulletSpawned = true
         g.bullets.push({
@@ -649,7 +863,7 @@ export default function DodgePage() {
         g.bigBulletTrapPhase = 1
         const exitY = Math.max(110, Math.min(HEIGHT - 110, g.playerY))
         for (let i = -2; i <= 2; i++) spawnBullet(-90, exitY + i * 62, 980, 0, 16, 'rgba(251,191,36,0.96)')
-        setUiMessage('외곽 회피 경로가 차단됩니다.')
+        setUiMessage('출구도 막아놨어요. 만우절 선물입니다.')
       }
       return
     }
@@ -663,13 +877,13 @@ export default function DodgePage() {
           g.pauseReason = 'brightness'
           g.darknessPauseTriggered = true
           setPhase('brightness')
-          setUiMessage('화면이 지나치게 어두워졌습니다. 디바이스 밝기를 올린 뒤 계속 진행하세요.')
+          setUiMessage('어두워진 건 당신 폰 문제입니다. (아님)')
           return
         }
-        setUiHudHint(g.time > 6 ? '시야가 조금씩 줄어듭니다' : '주변 광량이 낮아지고 있습니다')
+        setUiHudHint(g.time > 6 ? '점점 안 보이는 건 노안이 아닙니다' : '슬슬 어두워지는 거 느끼셨나요?')
       } else {
         g.darknessAlpha = Math.min(0.98, 0.32 + Math.max(0, g.time - 8.6) / 8.6)
-        setUiHudHint(g.time > 15 ? '밝기를 올려도 어둠이 더 빨라집니다' : '밝기 조정 후 테스트 재개')
+        setUiHudHint(g.time > 15 ? '밝기 올려봤자 소용없어요 ㅋㅋ' : '밝기 올렸죠? 어둠도 같이 올라왔어요')
       }
       if (g.time > 20) spawnRing(14, 250, 9, g.time)
       return
@@ -677,27 +891,27 @@ export default function DodgePage() {
 
     if (g.currentRoute === 'growth') {
       spawnNormalPattern(delta * (g.time < 16 ? 0.9 : 0.84))
-      if (g.time < 11) { g.playerRadius = 10; setUiHudHint('기본 패턴 분석 중') }
-      else if (g.time < 16) { g.playerRadius = 10 + (g.time - 11) * 0.7; setUiHudHint('기체 외곽선이 조금 퍼집니다') }
+      if (g.time < 11) { g.playerRadius = 10; setUiHudHint('지금은 날씬하네요') }
+      else if (g.time < 16) { g.playerRadius = 10 + (g.time - 11) * 0.7; setUiHudHint('살이 좀 찐 것 같은데...') }
       else {
         g.playerRadius = 13.5 + (g.time - 16) * 3.9
-        setUiHudHint(g.time < 21 ? '기체가 서서히 커지고 있습니다' : '피격 판정이 지나치게 정직해집니다')
+        setUiHudHint(g.time < 21 ? '뚱뚱해진 건 기분 탓입니다 (아님)' : '이제 피하는 게 물리적으로 불가능')
       }
       if (g.time > 14.5 && !g.growthWarningShown) {
         g.growthWarningShown = true
-        setUiMessage('외곽 충돌 반응이 비정상적으로 증가하고 있습니다.')
+        setUiMessage('기체가 커지는 건 버그가 아니라 체중 증가입니다.')
       }
       return
     }
 
     if (g.currentRoute === 'drift') {
       spawnNormalPattern(delta * (g.time < 14 ? 0.88 : 0.8))
-      if (g.time < 9) setUiHudHint('입력 지연 없음')
-      else if (g.time < 14) setUiHudHint('입력 오차가 천천히 누적됩니다')
-      else setUiHudHint('포인터와 기체 위치가 점점 어긋납니다')
+      if (g.time < 9) setUiHudHint('조작감 완벽하죠?')
+      else if (g.time < 14) setUiHudHint('조금 말 안 듣는 건 사양입니다')
+      else setUiHudHint('마우스 탓 아닙니다 진짜로')
       if (g.time > 10.8 && !g.driftWarningShown) {
         g.driftWarningShown = true
-        setUiMessage('기체 추적 오차가 발생하기 시작합니다.')
+        setUiMessage('기체가 말을 안 듣기 시작합니다. 마우스 문제 아니에요~')
       }
       if (g.time > 19) spawnRing(12, 220, 9, g.time * 0.72)
       return
@@ -705,7 +919,7 @@ export default function DodgePage() {
 
     if (g.currentRoute === 'wall') {
       spawnNormalPattern(delta * (g.time < 10.6 ? 0.36 : 0.22))
-      if (g.time <= 10.6) setUiHudHint('안전 구간을 탐색하는 중입니다')
+      if (g.time <= 10.6) setUiHudHint('안전한 곳을 찾고 있어요...')
       if (g.time > 10.6 && g.wallPhase === 0) {
         g.wallPhase = 1
         g.wallGapIndex = Math.max(3, Math.min(15, Math.floor(g.playerY / 32) - 1))
@@ -716,10 +930,10 @@ export default function DodgePage() {
           spawnBullet(-100, y, 760, 0, 15, 'rgba(244,114,182,0.98)')
           spawnBullet(WIDTH + 100, y, -760, 0, 15, 'rgba(244,114,182,0.98)')
         }
-        setUiHudHint('중앙에 안전 통로가 형성됩니다')
-        setUiMessage('정면에 넓은 안전 통로가 탐지되었습니다.')
+        setUiHudHint('여기 안전해 보여요! 들어가세요!')
+        setUiMessage('안전 통로 발견! 여기로 오세요! (절대 함정 아님)')
       }
-      if (g.time > 11.7 && g.wallPhase === 1) setUiHudHint('이 통로면 충분해 보입니다')
+      if (g.time > 11.7 && g.wallPhase === 1) setUiHudHint('편안하시죠? 잠깐만요...')
       if (g.time > 12.32 && g.wallPhase === 1) {
         g.wallPhase = 2
         const laneY = 12 + (g.wallGapIndex + 1.5) * 32
@@ -730,8 +944,8 @@ export default function DodgePage() {
         }
         spawnBullet(WIDTH / 2 - 40, laneY - 190, 0, 860, 15, 'rgba(251,191,36,0.98)')
         spawnBullet(WIDTH / 2 + 40, laneY + 190, 0, -860, 15, 'rgba(251,191,36,0.98)')
-        setUiHudHint('방금 보였던 안전 통로가 닫힙니다')
-        setUiMessage('안전 구간이 다시 계산됩니다.')
+        setUiHudHint('ㅋㅋ 안전 통로 닫힘')
+        setUiMessage('안전지대라고 했죠? 만우절이에요~')
       }
       if (g.time > 13.06 && g.wallPhase === 2) {
         g.wallPhase = 3
@@ -741,20 +955,20 @@ export default function DodgePage() {
           spawnBullet(x, -80, 0, 980, 14, 'rgba(251,191,36,0.96)')
           spawnBullet(x + 28, HEIGHT + 80, 0, -980, 14, 'rgba(251,191,36,0.96)')
         }
-        setUiHudHint('빠져나온 구간도 다시 닫힙니다')
-        setUiMessage('안전 구간이 한 번 더 재계산됩니다.')
+        setUiHudHint('이번엔 진짜 끝입니다 (거짓말)')
+        setUiMessage('도망친 곳도 막아놨어요. 꼼꼼하죠?')
       }
       return
     }
 
     if (g.currentRoute === 'reward') {
       spawnNormalPattern(delta * 0.76)
-      if (g.time < 13.2) setUiHudHint('생존 데이터 집계 중')
-      else if (g.time < 17.8) setUiHudHint('오류창 출력 중')
-      else setUiHudHint('오류창 종료 직후 패턴이 재개됩니다')
+      if (g.time < 13.2) setUiHudHint('잠깐 시스템 점검할게요...')
+      else if (g.time < 17.8) setUiHudHint('이 오류창 진짜입니다 (거짓말)')
+      else setUiHudHint('오류창 닫히면 선물이 있어요~')
       if (g.time > 13.1 && !g.rewardWarningShown) {
         g.rewardWarningShown = true
-        setUiMessage('시스템 상태를 확인하는 중입니다.')
+        setUiMessage('축하합니다! 버그를 발견하셨습니다! (거짓말)')
       }
       if (g.time > 15.1 && g.rewardTrapPhase === 0) {
         g.rewardTrapPhase = 1
@@ -773,9 +987,9 @@ export default function DodgePage() {
 
     if (g.currentRoute === 'error59') {
       spawnNormalPattern(delta * (g.time < 26 ? 0.08 : 0.12))
-      if (g.displayedTime < 20) setUiHudHint('이번 세션은 30초로 단축됩니다')
-      else if (g.displayedTime < 27.2) setUiHudHint('시간이 조금씩 느려지기 시작합니다')
-      else setUiHudHint('타이머 응답이 불안정합니다')
+      if (g.displayedTime < 20) setUiHudHint('30초만 버티면 됩니다! (진심)')
+      else if (g.displayedTime < 27.2) setUiHudHint('시간이 좀 느린 건 기분 탓...')
+      else setUiHudHint('29초에서 왜 안 넘어가죠? ㅎㅎ')
       const pulse = Math.floor((g.displayedTime - 27.5) / 0.5)
       if (pulse >= 0 && pulse < 3 && pulse !== g.errorPulseCount) {
         g.errorPulseCount = pulse
@@ -791,10 +1005,10 @@ export default function DodgePage() {
     if (!g.running) return
     if (g.currentRoute === 'normal') { endRunByKey('normalFail'); return }
     endSessionWithoutUnlock(
-      '60.00초 기록 달성',
-      '예정된 사고 구간을 넘겼습니다. 이번 세션은 결과 확인용으로 종료됩니다.',
-      '이번 세션은 참고 기록으로만 종료되었습니다.',
-      '60초 도달로 세션이 종료되었습니다. 다음 패턴에서 다른 기록을 확인해 보세요.'
+      '축하합니다! ...진짜로요?',
+      '60초를 버텼습니다. 이상하네요, 죽었어야 하는데. 혹시 치트 쓰셨나요?',
+      '이번 기록은 의심스러우므로 참고용으로만 보관됩니다.',
+      '60초 생존 성공! 근데 이 게임의 목적은 죽는 거였는데...'
     )
   }, [endRunByKey, endSessionWithoutUnlock])
 
@@ -829,6 +1043,9 @@ export default function DodgePage() {
     updateRoute(delta)
     if (g.paused) { renderScene(); syncUI(); animFrameRef.current = requestAnimationFrame(loop); return }
     updateBullets(delta)
+    updateStars(delta)
+    updateParticles(delta)
+    checkNearMiss(delta)
     hitTest()
     renderScene()
     syncUI()
@@ -841,7 +1058,8 @@ export default function DodgePage() {
     const g = gs.current
     g.attempts += 1
     g.running = true; g.time = 0; g.displayedTime = 0; g.level = 1
-    g.bullets = []; g.particles = []; g.playerRadius = 10
+    g.bullets = []; g.particles = []; g.trail = []; g.playerRadius = 10
+    g.nearMissTimer = 0; g.shakeX = 0; g.shakeY = 0
     g.playerX = WIDTH / 2; g.playerY = HEIGHT / 2; g.mouseX = WIDTH / 2; g.mouseY = HEIGHT / 2
     g.currentRoute = ROUTES[(g.attempts - 1) % ROUTES.length]
     g.lastTimestamp = 0; g.darknessAlpha = 0; g.paused = false; g.pauseReason = 'none'
@@ -854,9 +1072,9 @@ export default function DodgePage() {
     g.bigBulletSpawned = false; g.bigBulletWarningShown = false; g.bigBulletTrapPhase = 0
     g.errorPulseCount = -1; g.errorTriggered = false
     if (g.currentRoute === 'error59') {
-      setUiMessage('시스템 안정성 점검으로 이번 세션 목표 시간이 30초로 조정되었습니다. 30초만 버티면 됩니다.')
+      setUiMessage('특별 할인! 이번엔 30초만 버티면 됩니다. 쉽죠? (만우절)')
     } else {
-      setUiMessage(publicRouteLabel(g.currentRoute) + ' 분석 시작. 초반 흐름을 읽고 안전 구간을 확보하세요.')
+      setUiMessage(publicRouteLabel(g.currentRoute) + ' 시작! 행운을 빕니다. (필요할 거예요)')
     }
     setPhase('playing')
     setResultInfo(null)
@@ -888,11 +1106,11 @@ export default function DodgePage() {
   }, [loop, resultInfo])
 
   const resetCollection = useCallback(() => {
-    if (!confirm('정말 기록을 초기화할까요? 저장된 결과가 모두 삭제됩니다.')) return
+    if (!confirm('정말 초기화요? 그 고생을 또 하실 건가요?')) return
     gs.current.collected = []
     saveCollection([])
     setCollected([])
-    setUiMessage('기록이 초기화되었습니다. 새 세션부터 다시 누적됩니다.')
+    setUiMessage('전부 지웠습니다. 다시 죽으러 가시죠.')
   }, [])
 
   const resumeAfterBrightness = useCallback(() => {
@@ -900,7 +1118,7 @@ export default function DodgePage() {
     if (g.pauseReason !== 'brightness') return
     g.paused = false; g.pauseReason = 'none'; g.darknessAdjusted = true; g.lastTimestamp = 0
     setPhase('playing')
-    setUiMessage('밝기 조정을 마쳤습니다. 테스트를 다시 시작합니다.')
+    setUiMessage('밝기 올리셨죠? 어둠도 업그레이드했습니다~')
     animFrameRef.current = requestAnimationFrame(loop)
   }, [loop])
 
@@ -947,188 +1165,183 @@ export default function DodgePage() {
   // ─── Derived UI ────────────────────────────────────────
 
   const target = getSessionTarget(uiRoute)
-  const pauseLabel = phase === 'collection' ? '상태 기록 확인 중' : phase === 'brightness' ? '상태 밝기 조정 중' : null
-  const routeStatusText = pauseLabel || (phase === 'playing' ? '상태 ' + publicRouteLabel(uiRoute) : '상태 준비중')
-  const hudModeText = phase === 'collection' ? '기록 확인' : phase === 'brightness' ? '밝기 조정' : phase === 'playing' ? publicRouteLabel(uiRoute) : '대기'
+  const isPlaying = phase === 'playing'
 
   // ─── Render ────────────────────────────────────────────
 
   return (
     <div className={s.dodgeRoot}>
-      <div className={s.app}>
-        {/* Left Panel */}
-        <section className={s.panel}>
-          <div className={s.panelHeader}>
-            <h1 className={s.title}>Zero Trace</h1>
-            <p className={s.sub}>제한 시간 60초. 움직임을 유지하면서 밀려오는 탄막을 피하세요. 기록은 자동 저장되며, 반복 플레이 데이터가 누적됩니다.</p>
-          </div>
-          <div className={s.panelBody}>
-            <div className={s.badgeRow}>
-              <div className={s.badge}>도전 {uiAttempts}회</div>
-              <div className={s.badge}>기록 {getCollectedCount(collected)} / {TOTAL_VISIBLE_COLLECTION}</div>
-              <div className={s.badge}>{routeStatusText}</div>
-            </div>
+      <div className={s.canvasWrap}>
+        <canvas ref={canvasRef} width={WIDTH} height={HEIGHT} onMouseMove={onMouseMove} onTouchMove={onTouchMove} />
 
-            <div className={s.meter}>
-              <div className={s.meterHead}>
-                <span>생존 진행도</span>
-                <span>{uiTime} / {target.toFixed(2)}초</span>
-              </div>
+        {/* Top HUD - only during play */}
+        {isPlaying && (
+          <div className={s.topHud} style={{ opacity: uiHudOpacity }}>
+            <div className={s.hudGroup}>
+              <div className={s.hudPill}>{uiHudHint}</div>
+            </div>
+            <div className={s.hudGroup}>
+              <div className={s.hudPill}>LV {uiLevel}</div>
+              <div className={s.hudPill}>도전 {uiAttempts}회</div>
+              <div className={s.hudPill}>기록 {getCollectedCount(collected)}/{TOTAL_VISIBLE_COLLECTION}</div>
+            </div>
+          </div>
+        )}
+
+        {/* Bottom progress bar - only during play */}
+        {isPlaying && (
+          <div className={s.bottomBar}>
+            <div className={s.progressRow}>
+              <span className={s.progressTime}>{uiTime}</span>
               <div className={s.bar}>
                 <div className={s.barFill} style={{ width: uiProgress + '%' }} />
               </div>
-            </div>
-
-            <div className={s.statusBox}>
-              <div className={s.statusLabel}>현재 단계</div>
-              <div className={s.statusValue}>LV {uiLevel}</div>
-            </div>
-
-            <div className={s.statusBox}>
-              <div className={s.statusLabel}>충돌 규칙</div>
-              <div className={s.statusValue}>1회 피격 시 종료</div>
-              <div className={s.statusDetail}>기체는 한 번만 맞아도 세션이 끝납니다. 안전 구간보다 충돌 여유를 먼저 확보하세요.</div>
-            </div>
-
-            <div className={s.statusBox}>
-              <div className={s.statusLabel}>운영 로그</div>
-              <div>{uiMessage}</div>
-            </div>
-
-            <div className={s.btnGrid}>
-              <button className={`${s.btn} ${s.primaryBtn}`} onClick={startGame}>게임 시작</button>
-              <button className={`${s.btn} ${s.secondaryBtn}`} onClick={openCollection}>기록 보관함</button>
-              <button className={`${s.btn} ${s.dangerBtn}`} onClick={resetCollection}>기록 초기화</button>
-            </div>
-
-            <div className={s.tipBox}>
-              <strong>플레이 팁</strong><br />
-              마우스나 터치로 흰색 기체를 움직여 탄막을 회피하세요.<br />
-              플레이 기록은 자동 저장되며, 반복 도전 시 보관함 정보가 갱신됩니다.
+              <span className={s.progressTime}>{target.toFixed(0)}s</span>
             </div>
           </div>
-        </section>
+        )}
 
-        {/* Right Panel - Canvas */}
-        <section className={s.panel}>
-          <div className={s.panelBody}>
-            <div className={s.canvasWrap}>
-              <canvas ref={canvasRef} width={WIDTH} height={HEIGHT} onMouseMove={onMouseMove} onTouchMove={onTouchMove} />
-
-              {/* HUD */}
-              <div className={s.topHud} style={{ opacity: uiHudOpacity }}>
-                <div className={s.hudGroup}>
-                  <div className={s.hudPill}>{uiTime}초</div>
-                  <div className={s.hudPill}>LV {uiLevel}</div>
-                  <div className={s.hudPill}>{hudModeText}</div>
-                </div>
-                <div className={s.hudGroup}>
-                  <div className={s.hudPill}>{uiHudHint}</div>
-                </div>
+        {/* Start Overlay */}
+        {phase === 'idle' && (
+          <div className={s.overlay}>
+            <div className={s.overlayCard}>
+              <div className={s.heroTitle}>ZERO TRACE</div>
+              <p className={s.heroSub}>
+                60초만 살아남으면 됩니다. 간단하죠?<br />
+                (개발자는 웃고 있습니다)
+              </p>
+              <div className={s.nameRow}>
+                <input
+                  className={s.nameInput}
+                  type="text"
+                  placeholder="닉네임"
+                  maxLength={20}
+                  value={playerName}
+                  onChange={(e) => { setPlayerName(e.target.value); localStorage.setItem(NAME_STORAGE_KEY, e.target.value) }}
+                />
+                <button
+                  className={s.rerollBtn}
+                  onClick={() => { const n = generateRandomName(); setPlayerName(n); localStorage.setItem(NAME_STORAGE_KEY, n) }}
+                  title="랜덤 닉네임"
+                >&#x1F3B2;</button>
               </div>
-
-              {/* Start Overlay */}
-              {phase === 'idle' && (
-                <div className={s.overlay}>
-                  <div className={s.overlayCard}>
-                    <div className={s.heroTitle}>SURVIVAL TEST</div>
-                    <p className={s.heroSub}>
-                      포인터로 기체를 이동시켜 60초 동안 탄막을 버티세요.<br />
-                      회차별 기록은 자동 저장되며, 축적된 결과는 보관함에서 확인할 수 있습니다.
-                    </p>
-                    <div className={s.heroActions}>
-                      <button className={`${s.btn} ${s.primaryBtn}`} onClick={startGame}>테스트 시작</button>
-                      <button className={`${s.btn} ${s.secondaryBtn}`} onClick={openCollection}>기록 보기</button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Result Overlay */}
-              {phase === 'result' && resultInfo && (
-                <div className={s.overlay}>
-                  <div className={s.overlayCard}>
-                    <div className={s.heroTitle} style={{ fontSize: 36 }}>{resultInfo.title}</div>
-                    <p className={s.heroSub}>{resultInfo.description}</p>
-                    <div className={s.heroActions}>
-                      <button className={`${s.btn} ${s.primaryBtn}`} onClick={startGame}>다시 시작</button>
-                      <button className={`${s.btn} ${s.secondaryBtn}`} onClick={openCollection}>기록 보관함</button>
-                    </div>
-                    <p className={s.footerNote}>{resultInfo.footer}</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Error Modal */}
-              {phase === 'error' && (
-                <div className={`${s.modal} ${s.errorModal}`}>
-                  <div className={s.modalCard}>
-                    <div className={s.errorTitle}>시스템 예외 감지</div>
-                    <p className={s.heroSub}>
-                      비정상적인 시간 축 데이터가 감지되었습니다.<br />
-                      현재 세션을 종료하고 기록을 정리합니다.
-                    </p>
-                    <div className={s.errorList}>
-                      - 세션 시간값이 허용 범위를 벗어났습니다<br />
-                      - 표시 타이머와 내부 타이머의 동기화가 손상되었습니다<br />
-                      - 무결성 확인을 위해 결과 처리 단계로 이동합니다
-                    </div>
-                    <div className={s.heroActions}>
-                      <button className={`${s.btn} ${s.primaryBtn}`} onClick={restartAfterError}>세션 정리</button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Brightness Modal */}
-              {phase === 'brightness' && (
-                <div className={s.modal}>
-                  <div className={`${s.modalCard} ${s.brightnessCard}`}>
-                    <div className={s.heroTitle} style={{ marginBottom: 12 }}>화면 보정 필요</div>
-                    <p className={s.heroSub}>
-                      현재 구간은 주변 조명과 화면 밝기에 큰 영향을 받습니다.<br />
-                      디바이스 화면 밝기를 최대로 올린 뒤 계속 진행하세요.
-                    </p>
-                    <div className={s.brightnessPreview}>MAX BRIGHTNESS</div>
-                    <div className={s.heroActions}>
-                      <button className={`${s.btn} ${s.primaryBtn}`} onClick={resumeAfterBrightness}>밝기 올리고 계속하기</button>
-                    </div>
-                    <p className={s.footerNote}>재개 후 테스트가 즉시 이어집니다.</p>
-                  </div>
-                </div>
-              )}
+              <div className={s.heroActions}>
+                <button className={`${s.btn} ${s.primaryBtn}`} onClick={startGame}>죽으러 가기</button>
+                <button className={`${s.btn} ${s.secondaryBtn}`} onClick={openCollection}>사망 도감</button>
+                <button className={`${s.btn} ${s.secondaryBtn}`} onClick={() => { fetchLeaderboard(); setPhase('leaderboard') }}>랭킹</button>
+              </div>
             </div>
           </div>
-        </section>
+        )}
+
+        {/* Result Overlay */}
+        {phase === 'result' && resultInfo && (
+          <div className={s.overlay}>
+            <div className={s.overlayCard}>
+              <div className={s.heroTitle} style={{ fontSize: 32 }}>{resultInfo.title}</div>
+              <p className={s.heroSub}>{resultInfo.description}</p>
+              <p className={s.footerNote}>{resultInfo.footer}</p>
+              <div className={s.heroActions}>
+                <button className={`${s.btn} ${s.primaryBtn}`} onClick={startGame}>또 죽으러 가기</button>
+                <button className={`${s.btn} ${s.secondaryBtn}`} onClick={openCollection}>사망 도감</button>
+                <button className={`${s.btn} ${s.secondaryBtn}`} onClick={() => { fetchLeaderboard(); setPhase('leaderboard') }}>랭킹</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Error Modal */}
+        {phase === 'error' && (
+          <div className={s.overlay}>
+            <div className={s.overlayCard}>
+              <div className={s.errorTitle}>앗! 시간이 고장났어요</div>
+              <p className={s.heroSub}>
+                시간이 29초에서 멈춘 건 버그가 아닙니다.<br />
+                만우절 기념 특별 기능이에요. 감사하세요.
+              </p>
+              <div className={s.heroActions}>
+                <button className={`${s.btn} ${s.primaryBtn}`} onClick={restartAfterError}>억울하지만 확인</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Brightness Modal */}
+        {phase === 'brightness' && (
+          <div className={s.overlay}>
+            <div className={`${s.overlayCard} ${s.brightnessCard}`}>
+              <div className={s.heroTitle} style={{ marginBottom: 12 }}>안 보이시죠?</div>
+              <p className={s.heroSub}>
+                화면이 어두운 건 당신 폰 문제입니다.<br />
+                밝기를 올리면 해결됩니다. (해결 안 됨)
+              </p>
+              <div className={s.brightnessPreview}>MAX BRIGHTNESS</div>
+              <div className={s.heroActions}>
+                <button className={`${s.btn} ${s.primaryBtn}`} onClick={resumeAfterBrightness}>속는 셈 치고 밝기 올리기</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Collection Modal */}
       {phase === 'collection' && (
         <div className={s.modal} onClick={(e) => { if (e.target === e.currentTarget) closeCollection() }}>
           <div className={`${s.modalCard} ${s.collectionModalCard}`}>
-            <h2 className={s.title} style={{ marginBottom: 8 }}>기록 보관함</h2>
-            <p className={s.sub}>세션 결과가 누적 저장됩니다. 잠긴 기록은 조건을 만족하면 자동으로 열립니다.</p>
+            <h2 className={s.title} style={{ marginBottom: 8 }}>사망 도감</h2>
+            <p className={s.sub}>다양한 방법으로 죽어보세요. 수집 욕구를 자극합니다.</p>
             <div className={s.collectionGrid}>
               {COLLECTION_ORDER.map((key) => {
                 const data = ENDINGS[key]
                 const unlocked = collected.includes(key)
                 const name = unlocked ? data.name : key === 'fakeFinal' ? data.name : '???'
-                const description = unlocked ? data.description : key === 'fakeFinal' ? data.description : '잠긴 기록입니다. 조건을 만족하면 상세 정보가 표시됩니다.'
-                const footerText = unlocked ? '기록 저장 완료' : key === 'fakeFinal' ? '조건: ' + data.unlockHint : '조건: 비공개'
-                const stateText = unlocked ? '획득 완료' : key === 'fakeFinal' ? '최종 기록' : '잠김'
+                const description = unlocked ? data.description : key === 'fakeFinal' ? data.description : '아직 이 방법으론 안 죽어봤네요.'
+                const stateText = unlocked ? '사망 확인' : key === 'fakeFinal' ? '???' : '미경험'
                 return (
                   <div key={key} className={`${s.endCard} ${unlocked ? s.endCardUnlocked : s.endCardLocked}`}>
                     <div className={s.endId}>{data.id}</div>
                     <div className={s.endState}>{stateText}</div>
                     <div className={s.endName}>{name}</div>
                     <div className={s.endDesc}>{description}</div>
-                    <div className={s.footerNote}>{footerText}</div>
                   </div>
                 )
               })}
             </div>
             <div className={s.heroActions}>
               <button className={`${s.btn} ${s.primaryBtn}`} onClick={closeCollection}>닫기</button>
+              <button className={`${s.btn} ${s.dangerBtn}`} onClick={() => { resetCollection(); closeCollection() }}>초기화</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Leaderboard Modal */}
+      {phase === 'leaderboard' && (
+        <div className={s.modal} onClick={(e) => { if (e.target === e.currentTarget) setPhase(resultInfo ? 'result' : 'idle') }}>
+          <div className={`${s.modalCard} ${s.collectionModalCard}`}>
+            <h2 className={s.title} style={{ marginBottom: 8 }}>생존 랭킹</h2>
+            <p className={s.sub}>오래 살아남은 순서입니다. 부러우면 지는 겁니다.</p>
+            <div className={s.leaderboardTable}>
+              <div className={s.lbHeader}>
+                <span className={s.lbRank}>#</span>
+                <span className={s.lbName}>이름</span>
+                <span className={s.lbTime}>생존 시간</span>
+                <span className={s.lbRoute}>모드</span>
+              </div>
+              {leaderboard.length === 0 && (
+                <div className={s.lbEmpty}>아직 아무도 안 죽었습니다. (거짓말)</div>
+              )}
+              {leaderboard.map((entry, i) => (
+                <div key={i} className={`${s.lbRow} ${i < 3 ? s.lbTop3 : ''}`}>
+                  <span className={s.lbRank}>{i + 1}</span>
+                  <span className={s.lbName}>{entry.name}</span>
+                  <span className={s.lbTime}>{Number(entry.survival_time).toFixed(2)}s</span>
+                  <span className={s.lbRoute}>{entry.route}</span>
+                </div>
+              ))}
+            </div>
+            <div className={s.heroActions}>
+              <button className={`${s.btn} ${s.primaryBtn}`} onClick={() => setPhase(resultInfo ? 'result' : 'idle')}>닫기</button>
             </div>
           </div>
         </div>
