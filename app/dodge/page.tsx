@@ -579,16 +579,9 @@ export default function DodgePage() {
       g.displayedTime = Math.max(g.displayedTime, next)
     } else {
       if (g.displayedTime < 20) g.displayedTime = 20
-      const slowProgress = Math.min(1, (g.time - 20) / 12)
-      const rate = 1 - 0.6 * Math.pow(slowProgress, 1.6)
+      const rate = Math.max(0.001, (30 - g.displayedTime) / 10)
       const next = Math.min(cap, g.displayedTime + delta * rate)
       g.displayedTime = Math.max(g.displayedTime, next)
-    }
-    if ((g.displayedTime > 29.02 || g.time > 36) && !g.errorTriggered) {
-      g.errorTriggered = true
-      g.running = false
-      setPhase('error')
-      setUiMessage('시간이 멈춘 건 버그가 아닙니다. 당신만 늙고 있을 뿐이에요.')
     }
   }
 

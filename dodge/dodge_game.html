@@ -779,15 +779,8 @@
         state.displayedTime = state.time;
       } else {
         if (state.displayedTime < 20) state.displayedTime = 20;
-        const slowProgress = Math.min(1, (state.time - 20) / 12);
-        const rate = 1 - 0.6 * Math.pow(slowProgress, 1.6);
+        const rate = Math.max(0.001, (30 - state.displayedTime) / 10);
         state.displayedTime += delta * rate;
-      }
-      if ((state.displayedTime > 29.02 || state.time > 36) && !state.errorTriggered) {
-        state.errorTriggered = true;
-        state.running = false;
-        errorModal.style.display = 'flex';
-        setMessage('시간 데이터 예외가 감지되었습니다. 세션을 정리하는 중입니다.');
       }
     }
 
