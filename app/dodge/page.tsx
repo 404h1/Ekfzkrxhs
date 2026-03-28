@@ -7,7 +7,7 @@ import s from './dodge.module.css'
 
 type Route = 'normal' | 'instant' | 'hope' | 'pattern' | 'growth' | 'reward' | 'hudDrop' | 'drift' | 'darkness' | 'wall' | 'bigBullet' | 'error59'
 type PauseReason = 'none' | 'collection' | 'brightness'
-type Phase = 'idle' | 'playing' | 'result' | 'error' | 'brightness' | 'collection' | 'leaderboard'
+type Phase = 'idle' | 'playing' | 'result' | 'error' | 'brightness' | 'collection' | 'leaderboard' | 'roulette'
 
 interface Bullet {
   x: number; y: number; vx: number; vy: number; r: number; color: string
@@ -217,6 +217,9 @@ export default function DodgePage() {
   const [resultInfo, setResultInfo] = useState<{ title: string; description: string; footer: string } | null>(null)
   const [leaderboard, setLeaderboard] = useState<ScoreEntry[]>([])
   const [playerName, setPlayerName] = useState('')
+  const [roulettePhase, setRoulettePhase] = useState<'spinning' | 'result' | 'reveal'>('spinning')
+  const [roulettePrize, setRoulettePrize] = useState(0)
+  const [rouletteAngle, setRouletteAngle] = useState(0)
 
   useEffect(() => {
     const saved = loadSavedName()
@@ -1023,17 +1026,59 @@ export default function DodgePage() {
 
   // ─── Game loop ─────────────────────────────────────────
 
+  // ─── Roulette system ──────────────────────────────────
+  const FAKE_PRIZES = [
+    { emoji: '☕', name: '스타벅스 아메리카노', desc: '따뜻한 아메리카노 1잔 (Tall)', code: 'AFD-2026-COFFEE-XXXX' },
+    { emoji: '🍕', name: '도미노피자 50% 할인', desc: '라지 사이즈 50% 할인 쿠폰', code: 'AFD-2026-PIZZA-XXXX' },
+    { emoji: '🎬', name: 'CGV 영화 관람권', desc: '2D 일반 영화 1매', code: 'AFD-2026-MOVIE-XXXX' },
+    { emoji: '🍦', name: '배스킨라빈스 싱글콘', desc: '싱글 레귤러 아이스크림 1개', code: 'AFD-2026-ICECR-XXXX' },
+    { emoji: '🍔', name: '맥도날드 빅맥 세트', desc: '빅맥 + 후렌치후라이(M) + 콜라(M)', code: 'AFD-2026-BIGMC-XXXX' },
+    { emoji: '🧋', name: '공차 밀크티 L', desc: '타로 밀크티 + 펄 추가', code: 'AFD-2026-GONCH-XXXX' },
+    { emoji: '🎧', name: '에어팟 프로 3', desc: 'Apple AirPods Pro 3 (화이트)', code: 'AFD-2026-AIRPD-XXXX' },
+    { emoji: '💰', name: '현금 100만원', desc: '계좌로 즉시 입금 (세후)', code: 'AFD-2026-MONEY-XXXX' },
+  ]
+
+  const startRoulette = useCallback(() => {
+    const g = gs.current
+    g.running = false
+    g.paused = false
+    g.pauseReason = 'none'
+    saveScore(g.displayedTime, g.currentRoute, 'survived')
+
+    const prize = Math.floor(Math.random() * FAKE_PRIZES.length)
+    setRoulettePrize(prize)
+    setRoulettePhase('spinning')
+    setRouletteAngle(0)
+    setPhase('roulette')
+
+    // Spin animation: accelerate then decelerate over 4 seconds
+    const totalDuration = 4000
+    const targetAngle = 360 * 5 + (prize / FAKE_PRIZES.length) * 360 + Math.random() * 30
+    const startTime = Date.now()
+
+    const spin = () => {
+      const elapsed = Date.now() - startTime
+      const progress = Math.min(elapsed / totalDuration, 1)
+      // Ease out cubic
+      const eased = 1 - Math.pow(1 - progress, 3)
+      setRouletteAngle(eased * targetAngle)
+
+      if (progress < 1) {
+        requestAnimationFrame(spin)
+      } else {
+        // Show fake prize after spin
+        setTimeout(() => setRoulettePhase('result'), 600)
+      }
+    }
+    requestAnimationFrame(spin)
+  }, [saveScore])
+
   const finishRunAtTarget = useCallback(() => {
     const g = gs.current
     if (!g.running) return
     if (g.currentRoute === 'normal') { endRunByKey('normalFail'); return }
-    endSessionWithoutUnlock(
-      '축하합니다! ...진짜로요?',
-      '60초를 버텼습니다. 이상하네요, 죽었어야 하는데. 혹시 치트 쓰셨나요?',
-      '이번 기록은 의심스러우므로 참고용으로만 보관됩니다.',
-      '60초 생존 성공! 근데 이 게임의 목적은 죽는 거였는데...'
-    )
-  }, [endRunByKey, endSessionWithoutUnlock])
+    startRoulette()
+  }, [endRunByKey, startRoulette])
 
   const syncUI = useCallback(() => {
     const g = gs.current
@@ -1477,6 +1522,70 @@ export default function DodgePage() {
               <div className={s.heroActions}>
                 <button className={`${s.btn} ${s.primaryBtn}`} onClick={resumeAfterBrightness}>속는 셈 치고 밝기 올리기</button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Roulette Modal */}
+        {phase === 'roulette' && (
+          <div className={s.overlay}>
+            <div className={s.overlayCard} style={{ maxWidth: 440 }}>
+              {roulettePhase === 'spinning' && (
+                <>
+                  <div className={s.heroTitle} style={{ fontSize: 28 }}>🎉 60초 생존 축하! 🎉</div>
+                  <p className={s.heroSub}>특별 보상 룰렛을 돌려드립니다!</p>
+                  <div className={s.rouletteWheel}>
+                    <div className={s.roulettePointer}>▼</div>
+                    <div className={s.rouletteDisc} style={{ transform: `rotate(${rouletteAngle}deg)` }}>
+                      {FAKE_PRIZES.map((p, i) => (
+                        <div
+                          key={i}
+                          className={s.rouletteSlice}
+                          style={{ transform: `rotate(${(i / FAKE_PRIZES.length) * 360}deg)` }}
+                        >
+                          <span className={s.rouletteEmoji}>{p.emoji}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <p className={s.footerNote}>두근두근...</p>
+                </>
+              )}
+              {roulettePhase === 'result' && (
+                <>
+                  <div className={s.heroTitle} style={{ fontSize: 24 }}>🎊 당첨! 🎊</div>
+                  <div className={s.prizeCard}>
+                    <div className={s.prizeEmoji}>{FAKE_PRIZES[roulettePrize].emoji}</div>
+                    <div className={s.prizeName}>{FAKE_PRIZES[roulettePrize].name}</div>
+                    <div className={s.prizeDesc}>{FAKE_PRIZES[roulettePrize].desc}</div>
+                    <div className={s.prizeCode}>{FAKE_PRIZES[roulettePrize].code}</div>
+                    <div className={s.prizeBarcode}>
+                      {'▍▏▎▍▌▏▍▎▏▌▍▏▎▍▌▏▍▎▏▌▍▏▎▍▌▏▍▎▏▌'}
+                    </div>
+                    <div className={s.prizeExpiry}>유효기간: 2026.04.01 ~ 2026.04.01</div>
+                  </div>
+                  <div className={s.heroActions}>
+                    <button className={`${s.btn} ${s.primaryBtn}`} onClick={() => setRoulettePhase('reveal')}>쿠폰 사용하기</button>
+                  </div>
+                </>
+              )}
+              {roulettePhase === 'reveal' && (
+                <>
+                  <div className={s.heroTitle} style={{ fontSize: 32 }}>만우절 🤡</div>
+                  <p className={s.heroSub}>
+                    진짜로 기프티콘이 나올 줄 알았나요?<br />
+                    60초를 버텨서 대단하긴 한데...<br />
+                    상품은 없습니다. 축하합니다!
+                  </p>
+                  <p className={s.footerNote}>
+                    유효기간 보셨나요? 4월 1일 ~ 4월 1일 ㅋㅋ
+                  </p>
+                  <div className={s.heroActions}>
+                    <button className={`${s.btn} ${s.primaryBtn}`} onClick={startGame}>분노의 재도전</button>
+                    <button className={`${s.btn} ${s.secondaryBtn}`} onClick={() => setPhase('idle')}>포기하기</button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}
