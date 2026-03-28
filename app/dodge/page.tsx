@@ -484,7 +484,7 @@ export default function DodgePage() {
 
   const drawRewardBanner = (ctx: CanvasRenderingContext2D) => {
     const g = gs.current
-    if (g.currentRoute !== 'reward' || g.time < 13.4 || g.time > 18.1) return
+    if (g.currentRoute !== 'reward' || g.time < 13.4 || g.time > 19.5) return
     const width = 760
     const height = 240
     const x = (WIDTH - width) / 2
@@ -1012,7 +1012,8 @@ export default function DodgePage() {
       spawnNormalPattern(delta * 0.76)
       if (g.time < 13.2) setUiHudHint('잠깐 시스템 점검할게요...')
       else if (g.time < 17.8) setUiHudHint('이 오류창 진짜입니다 (거짓말)')
-      else setUiHudHint('오류창 닫히면 선물이 있어요~')
+      else if (g.time < 19) setUiHudHint('오류창 닫히면 선물이 있어요~')
+      else setUiHudHint('버그 감지 중...')
       if (g.time > 13.1 && !g.rewardWarningShown) {
         g.rewardWarningShown = true
         setUiMessage('축하합니다! 버그를 발견하셨습니다! (거짓말)')
@@ -1028,6 +1029,12 @@ export default function DodgePage() {
       if (g.time > 16.4 && g.rewardTrapPhase === 1) {
         g.rewardTrapPhase = 2
         spawnRing(14, 210, 9, g.time * 0.5)
+      }
+      if (g.time > 19 && g.rewardTrapPhase === 2) {
+        g.rewardTrapPhase = 3
+        g.running = false
+        setUiMessage('심각한 버그가 감지되었습니다. 세션을 종료합니다.')
+        setTimeout(() => endRunByKey('reward'), 1500)
       }
       return
     }

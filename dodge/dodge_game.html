@@ -1174,8 +1174,10 @@
           hudHint.textContent = '생존 데이터 집계 중';
         } else if (state.time < 17.8) {
           hudHint.textContent = '오류창 출력 중';
-        } else {
+        } else if (state.time < 19) {
           hudHint.textContent = '오류창 종료 직후 패턴이 재개됩니다';
+        } else {
+          hudHint.textContent = '버그 감지 중...';
         }
 
         if (state.time > 13.1 && !state.rewardWarningShown) {
@@ -1195,6 +1197,13 @@
         if (state.time > 16.4 && state.rewardTrapPhase === 1) {
           state.rewardTrapPhase = 2;
           spawnRing(14, 210, 9, state.time * 0.5);
+        }
+
+        if (state.time > 19 && state.rewardTrapPhase === 2) {
+          state.rewardTrapPhase = 3;
+          state.running = false;
+          setMessage('심각한 버그가 감지되었습니다. 세션을 종료합니다.');
+          setTimeout(function() { endRunByKey('reward'); }, 1500);
         }
         return;
       }
@@ -1469,7 +1478,7 @@
     }
 
     function drawRewardBanner() {
-      if (state.currentRoute !== 'reward' || state.time < 13.4 || state.time > 18.1) return;
+      if (state.currentRoute !== 'reward' || state.time < 13.4 || state.time > 19.5) return;
       const width = 760;
       const height = 240;
       const x = (WIDTH - width) / 2;
