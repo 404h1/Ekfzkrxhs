@@ -1,19 +1,19 @@
-import type { Metadata } from 'next'
-import './globals.css'
+import type { Metadata } from "next";
+import "./globals.css";
 
 export const metadata: Metadata = {
-  title: '60초 챌린지',
-  description: '60초를 채우면 상품이 있습니다*',
-}
+  title: "Zero Trace - Survival Test",
+  description: "제한 시간 60초. 움직임을 유지하면서 밀려오는 탄막을 피하세요.",
+};
 
 export default function RootLayout({
   children,
-}: {
-  children: React.ReactNode
-}) {
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
     <html lang="ko">
       <body>{children}</body>
     </html>
-  )
+  );
 }
