@@ -1,0 +1,1619 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zero Trace - Survival Test</title>
+  <style>
+    * { box-sizing: border-box; }
+    :root {
+      --bg: #0f172a;
+      --panel: rgba(15, 23, 42, 0.88);
+      --panel-2: rgba(30, 41, 59, 0.92);
+      --line: rgba(148, 163, 184, 0.18);
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #f8fafc;
+      --danger: #fb7185;
+      --good: #34d399;
+      --warn: #fbbf24;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Arial, sans-serif;
+      background: radial-gradient(circle at top, #1e293b 0%, #0f172a 58%, #020617 100%);
+      color: var(--text);
+    }
+    .app {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 24px;
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      gap: 24px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
+      overflow: hidden;
+      backdrop-filter: blur(10px);
+    }
+    .panel-header { padding: 24px 24px 0; }
+    .panel-body { padding: 24px; }
+    h1, h2, h3, h4, p { margin-top: 0; }
+    .title { font-size: 28px; font-weight: 800; margin-bottom: 16px; }
+    .sub { color: var(--muted); line-height: 1.6; }
+    .badge-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+    .badge {
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.12);
+      border: 1px solid var(--line);
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .meter { margin-bottom: 16px; }
+    .meter-head { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+    .bar {
+      width: 100%; height: 12px; border-radius: 999px; overflow: hidden;
+      background: rgba(148, 163, 184, 0.14);
+      border: 1px solid var(--line);
+    }
+    .bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #60a5fa, #f8fafc); transition: width 0.15s ease; }
+    .status-box {
+      padding: 16px; border-radius: 20px; border: 1px solid var(--line); background: rgba(255,255,255,0.03); margin-bottom: 12px;
+    }
+    .status-label { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+    .status-value { font-size: 22px; font-weight: 800; }
+    .status-detail { color: var(--muted); line-height: 1.6; }
+    .btn-grid { display: grid; gap: 12px; margin: 18px 0; }
+    button {
+      border: none; cursor: pointer; border-radius: 18px; padding: 14px 16px; font-size: 15px; font-weight: 800;
+      transition: transform 0.12s ease, opacity 0.2s ease, background 0.2s ease;
+    }
+    button:hover { transform: translateY(-1px); }
+    button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+    .primary-btn { background: #f8fafc; color: #0f172a; }
+    .secondary-btn { background: rgba(255,255,255,0.06); color: var(--text); border: 1px solid var(--line); }
+    .danger-btn { background: rgba(251,113,133,0.14); color: #fecdd3; border: 1px solid rgba(251,113,133,0.22); }
+    .tip-box {
+      border-radius: 20px; padding: 16px; border: 1px dashed rgba(148,163,184,0.3); color: var(--muted); line-height: 1.6;
+      background: rgba(255,255,255,0.02);
+    }
+    .canvas-wrap {
+      position: relative;
+      aspect-ratio: 16 / 9;
+      width: 100%;
+      min-height: 640px;
+      border-radius: 30px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      background: #020617;
+    }
+    canvas {
+      width: 100%; height: 100%; display: block; background: linear-gradient(180deg, #0b1220, #020617);
+    }
+    .overlay {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 28px;
+    }
+    .modal {
+      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 28px;
+      background: rgba(2, 6, 23, 0.78);
+      z-index: 40;
+    }
+    .overlay-card, .modal-card {
+      width: min(720px, 100%); border-radius: 28px; padding: 28px; background: rgba(15,23,42,0.94);
+      border: 1px solid var(--line); box-shadow: 0 24px 80px rgba(0,0,0,0.45); text-align: center;
+    }
+    .modal-card {
+      max-height: calc(100vh - 56px);
+      overflow: auto;
+    }
+    .hero-title { font-size: 42px; font-weight: 900; margin-bottom: 10px; }
+    .hero-sub { font-size: 18px; color: var(--muted); line-height: 1.7; }
+    .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 22px; }
+    .small { font-size: 13px; color: var(--muted); }
+    .message-box {
+      padding: 16px; border-radius: 20px; background: rgba(255,255,255,0.03); border: 1px solid var(--line); line-height: 1.6;
+    }
+    .top-hud {
+      position: absolute; left: 18px; right: 18px; top: 18px; display: flex; justify-content: space-between; gap: 16px; pointer-events: none;
+    }
+    .hud-group { display: flex; gap: 10px; flex-wrap: wrap; }
+    .hud-pill {
+      padding: 10px 14px; border-radius: 999px; font-size: 13px; font-weight: 800; background: rgba(15,23,42,0.72);
+      border: 1px solid rgba(148,163,184,0.18); color: var(--text); backdrop-filter: blur(8px);
+    }
+    .error-modal { z-index: 45; }
+    .error-title { font-size: 34px; font-weight: 900; color: #fecdd3; margin-bottom: 8px; }
+    .error-list { text-align: left; width: fit-content; margin: 18px auto 0; color: var(--muted); line-height: 1.8; }
+    .brightness-card {
+      background: rgba(248, 250, 252, 0.98);
+      color: #020617;
+      border-color: rgba(15, 23, 42, 0.08);
+    }
+    .brightness-card .hero-sub,
+    .brightness-card .footer-note {
+      color: rgba(15, 23, 42, 0.7);
+    }
+    .brightness-preview {
+      margin: 18px auto 0;
+      width: min(420px, 100%);
+      min-height: 150px;
+      border-radius: 22px;
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: rgba(15, 23, 42, 0.38);
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.7), 0 18px 40px rgba(255,255,255,0.45);
+    }
+    .collection-modal-card {
+      width: min(1040px, 100%);
+      text-align: left;
+    }
+    .collection-grid {
+      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 18px;
+    }
+    .end-card {
+      position: relative;
+      text-align: left;
+      padding: 18px;
+      border-radius: 22px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.03);
+      min-height: 156px;
+      transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+    }
+    .end-card.unlocked {
+      border-color: rgba(52, 211, 153, 0.4);
+      background: linear-gradient(180deg, rgba(16, 185, 129, 0.16), rgba(255,255,255,0.04));
+      box-shadow: 0 14px 30px rgba(16, 185, 129, 0.16);
+    }
+    .end-card.locked { opacity: 0.56; filter: grayscale(0.26); }
+    .end-id { font-size: 12px; color: var(--muted); margin-bottom: 6px; font-weight: 800; }
+    .end-name { font-size: 18px; font-weight: 800; margin-bottom: 8px; }
+    .end-desc { color: var(--muted); line-height: 1.6; font-size: 14px; }
+    .end-state {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 12px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+    }
+    .end-card.unlocked .end-state {
+      background: rgba(52, 211, 153, 0.16);
+      color: #a7f3d0;
+      border: 1px solid rgba(52, 211, 153, 0.26);
+    }
+    .end-card.locked .end-state {
+      background: rgba(148, 163, 184, 0.12);
+      color: #cbd5e1;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+    }
+    .end-card.unlocked .end-id,
+    .end-card.unlocked .end-name {
+      color: #ecfdf5;
+    }
+    .muted { color: var(--muted); }
+    .good { color: var(--good); }
+    .warn { color: var(--warn); }
+    .danger { color: #fecdd3; }
+    .footer-note { margin-top: 12px; font-size: 12px; color: var(--muted); }
+    @media (max-width: 980px) {
+      .app { grid-template-columns: 1fr; }
+      .canvas-wrap { min-height: 520px; }
+      .collection-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 700px) {
+      .app { padding: 16px; }
+      .collection-grid { grid-template-columns: 1fr; }
+      .hero-title { font-size: 30px; }
+      .canvas-wrap { min-height: 420px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <section class="panel">
+      <div class="panel-header">
+        <h1 class="title">Zero Trace</h1>
+        <p class="sub">제한 시간 60초. 움직임을 유지하면서 밀려오는 탄막을 피하세요. 기록은 자동 저장되며, 반복 플레이 데이터가 누적됩니다.</p>
+      </div>
+      <div class="panel-body">
+        <div class="badge-row">
+          <div class="badge" id="attemptBadge">도전 0회</div>
+          <div class="badge" id="collectedBadge">기록 0 / 12</div>
+          <div class="badge" id="routeBadge">상태 준비중</div>
+        </div>
+
+        <div class="meter">
+          <div class="meter-head">
+            <span>생존 진행도</span>
+            <span id="progressText">0.00 / 60.00초</span>
+          </div>
+          <div class="bar">
+            <div class="bar-fill" id="progressFill"></div>
+          </div>
+        </div>
+
+        <div class="status-box">
+          <div class="status-label">현재 단계</div>
+          <div class="status-value" id="levelText">LV 1</div>
+        </div>
+
+        <div class="status-box">
+          <div class="status-label">충돌 규칙</div>
+          <div class="status-value" id="ruleTitle">1회 피격 시 종료</div>
+          <div class="status-detail">기체는 한 번만 맞아도 세션이 끝납니다. 안전 구간보다 충돌 여유를 먼저 확보하세요.</div>
+        </div>
+
+        <div class="status-box">
+          <div class="status-label">운영 로그</div>
+          <div id="messageText">포인터를 이동해 기체를 제어하세요. 시작 후 난도가 점진적으로 상승합니다.</div>
+        </div>
+
+        <div class="btn-grid">
+          <button class="primary-btn" id="startBtn">게임 시작</button>
+          <button class="secondary-btn" id="collectionBtn">기록 보관함</button>
+          <button class="danger-btn" id="resetBtn">기록 초기화</button>
+        </div>
+
+        <div class="tip-box">
+          <strong>플레이 팁</strong><br />
+          마우스나 터치로 흰색 기체를 움직여 탄막을 회피하세요.<br />
+          플레이 기록은 자동 저장되며, 반복 도전 시 보관함 정보가 갱신됩니다.
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-body">
+        <div class="canvas-wrap">
+          <canvas id="gameCanvas" width="1280" height="720"></canvas>
+          <div class="top-hud" id="topHud">
+            <div class="hud-group">
+              <div class="hud-pill" id="hudTime">00.00초</div>
+              <div class="hud-pill" id="hudLevel">LV 1</div>
+              <div class="hud-pill" id="hudMode">대기</div>
+            </div>
+            <div class="hud-group">
+              <div class="hud-pill" id="hudHint">마우스로 이동</div>
+            </div>
+          </div>
+          <div class="overlay" id="startOverlay">
+            <div class="overlay-card">
+              <div class="hero-title">SURVIVAL TEST</div>
+              <p class="hero-sub">
+                포인터로 기체를 이동시켜 60초 동안 탄막을 버티세요.<br />
+                회차별 기록은 자동 저장되며, 축적된 결과는 보관함에서 확인할 수 있습니다.
+              </p>
+              <div class="hero-actions">
+                <button class="primary-btn" id="overlayStartBtn">테스트 시작</button>
+                <button class="secondary-btn" id="overlayCollectionBtn">기록 보기</button>
+              </div>
+            </div>
+          </div>
+          <div class="overlay" id="resultOverlay" style="display:none;"></div>
+          <div class="modal error-modal" id="errorModal" style="display:none;">
+            <div class="modal-card">
+              <div class="error-title">시스템 예외 감지</div>
+              <p class="hero-sub">
+                비정상적인 시간 축 데이터가 감지되었습니다.<br />
+                현재 세션을 종료하고 기록을 정리합니다.
+              </p>
+              <div class="error-list">
+                - 세션 시간값이 허용 범위를 벗어났습니다<br />
+                - 표시 타이머와 내부 타이머의 동기화가 손상되었습니다<br />
+                - 무결성 확인을 위해 결과 처리 단계로 이동합니다
+              </div>
+              <div class="hero-actions">
+                <button class="primary-btn" id="refreshBtn">세션 정리</button>
+              </div>
+            </div>
+          </div>
+          <div class="modal" id="brightnessModal" style="display:none;">
+            <div class="modal-card brightness-card">
+              <div class="hero-title" style="margin-bottom:12px;">화면 보정 필요</div>
+              <p class="hero-sub">
+                현재 구간은 주변 조명과 화면 밝기에 큰 영향을 받습니다.<br />
+                디바이스 화면 밝기를 최대로 올린 뒤 계속 진행하세요.
+              </p>
+              <div class="brightness-preview">MAX BRIGHTNESS</div>
+              <div class="hero-actions">
+                <button class="primary-btn" id="resumeBrightnessBtn">밝기 올리고 계속하기</button>
+              </div>
+              <p class="footer-note">재개 후 테스트가 즉시 이어집니다.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="modal" id="collectionModal" style="display:none;">
+    <div class="modal-card collection-modal-card">
+      <h2 class="title" style="margin-bottom:8px;">기록 보관함</h2>
+      <p class="sub">세션 결과가 누적 저장됩니다. 잠긴 기록은 조건을 만족하면 자동으로 열립니다.</p>
+      <div class="collection-grid" id="collectionGrid"></div>
+      <div class="hero-actions">
+        <button class="primary-btn" id="closeCollectionBtn">닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'april_fools_dodge_collection_v1';
+    const TOTAL_VISIBLE_COLLECTION = 12;
+    const WIDTH = 1280;
+    const HEIGHT = 720;
+    const SURVIVAL_TARGET = 60;
+    const ROUTES = ['normal', 'instant', 'hope', 'pattern', 'growth', 'reward', 'hudDrop', 'drift', 'darkness', 'wall', 'bigBullet', 'error59'];
+
+    const ENDINGS = {
+      normalFail: {
+        id: 'END 00',
+        name: '정상 플레이',
+        description: '총알은 늘고 속도는 빨라졌습니다. 이 게임이 가장 정상적인 얼굴을 하고 있던 기록입니다.',
+        unlockHint: '미확인'
+      },
+      instant: {
+        id: 'END 01',
+        name: '시작하자마자 사망',
+        description: '당신은 게임을 시작했습니다. 그리고 끝났습니다.',
+        unlockHint: '미확인'
+      },
+      hope: {
+        id: 'END 02',
+        name: '어? 할만한데?',
+        description: '당신은 희망을 느꼈습니다. 그게 문제였습니다.',
+        unlockHint: '미확인'
+      },
+      pattern: {
+        id: 'END 03',
+        name: '이제 이해했다',
+        description: '이해한 순간, 게임은 당신을 이해했습니다.',
+        unlockHint: '미확인'
+      },
+      growth: {
+        id: 'END 04',
+        name: '크기 증가',
+        description: '몸집은 조금씩 커졌고, 마지막엔 회피라는 말이 예의가 아니게 됐습니다.',
+        unlockHint: '미확인'
+      },
+      error59: {
+        id: 'END 05',
+        name: '시간의 함정',
+        description: '시간은 흐르지 않습니다. 당신만 늙습니다.',
+        unlockHint: '미확인'
+      },
+      reward: {
+        id: 'END 06',
+        name: '시스템 오류',
+        description: '버그가 아니라 기능입니다.',
+        unlockHint: '미확인'
+      },
+      hudDrop: {
+        id: 'END 11',
+        name: '인터페이스 낙하',
+        description: '시간, 레벨, 상태 표시는 안내가 아니라 낙하물이었다.',
+        unlockHint: '미확인'
+      },
+      drift: {
+        id: 'END 07',
+        name: '입력 이탈',
+        description: '포인터는 멀쩡했지만, 기체가 당신의 의도를 끝까지 따라오진 않았습니다.',
+        unlockHint: '미확인'
+      },
+      darkness: {
+        id: 'END 08',
+        name: '시야 암전',
+        description: '밝기를 올렸습니다. 어둠도 같이 올라왔습니다.',
+        unlockHint: '미확인'
+      },
+      wall: {
+        id: 'END 09',
+        name: '여긴 안전합니다 (아님)',
+        description: '안전지대는 있었습니다. 당신이 들어간 직후 없어졌을 뿐입니다.',
+        unlockHint: '미확인'
+      },
+      bigBullet: {
+        id: 'END 10',
+        name: '대형 탄환',
+        description: '처음엔 피할 수 있어 보였습니다. 그 한 발이 남은 공간까지 먹어치우기 전까지는요.',
+        unlockHint: '미확인'
+      },
+      fakeFinal: {
+        id: 'END 99',
+        name: '완전 생존',
+        description: '모든 기록을 확보한 뒤 무피격으로 60초를 완주하면 해금된다고 알려진 최종 생존 기록입니다.',
+        unlockHint: '모든 기록 수집 후 무피격 60초 생존'
+      }
+    };
+
+    const state = {
+      running: false,
+      attempts: 0,
+      mouseX: WIDTH / 2,
+      mouseY: HEIGHT / 2,
+      playerX: WIDTH / 2,
+      playerY: HEIGHT / 2,
+      playerRadius: 10,
+      time: 0,
+      displayedTime: 0,
+      level: 1,
+      bullets: [],
+      particles: [],
+      currentRoute: 'normal',
+      collected: loadCollection(),
+      lastTimestamp: 0,
+      overlayMessage: '',
+      darknessAlpha: 0,
+      paused: false,
+      pauseReason: 'none',
+      darknessAdjusted: false,
+      darknessPauseTriggered: false,
+      instantTriggered: false,
+      hopeTrapPhase: 0,
+      patternWaveIndex: -1,
+      hudDropWave: -1,
+      hudDropWarningShown: false,
+      growthWarningShown: false,
+      driftWarningShown: false,
+      wallPhase: 0,
+      wallGapIndex: 0,
+      rewardWarningShown: false,
+      rewardTrapPhase: 0,
+      bigBulletSpawned: false,
+      bigBulletWarningShown: false,
+      bigBulletTrapPhase: 0,
+      errorPulseCount: -1,
+      errorTriggered: false
+    };
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const startBtn = document.getElementById('startBtn');
+    const overlayStartBtn = document.getElementById('overlayStartBtn');
+    const overlayCollectionBtn = document.getElementById('overlayCollectionBtn');
+    const collectionBtn = document.getElementById('collectionBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const closeCollectionBtn = document.getElementById('closeCollectionBtn');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const resumeBrightnessBtn = document.getElementById('resumeBrightnessBtn');
+
+    const startOverlay = document.getElementById('startOverlay');
+    const resultOverlay = document.getElementById('resultOverlay');
+    const topHud = document.getElementById('topHud');
+    const collectionModal = document.getElementById('collectionModal');
+    const collectionGrid = document.getElementById('collectionGrid');
+    const errorModal = document.getElementById('errorModal');
+    const brightnessModal = document.getElementById('brightnessModal');
+
+    const progressText = document.getElementById('progressText');
+    const progressFill = document.getElementById('progressFill');
+    const levelText = document.getElementById('levelText');
+    const messageText = document.getElementById('messageText');
+    const attemptBadge = document.getElementById('attemptBadge');
+    const collectedBadge = document.getElementById('collectedBadge');
+    const routeBadge = document.getElementById('routeBadge');
+    const hudTime = document.getElementById('hudTime');
+    const hudLevel = document.getElementById('hudLevel');
+    const hudMode = document.getElementById('hudMode');
+    const hudHint = document.getElementById('hudHint');
+
+    canvas.addEventListener('mousemove', onMouseMove);
+    canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+    startBtn.addEventListener('click', startGame);
+    overlayStartBtn.addEventListener('click', startGame);
+    collectionBtn.addEventListener('click', openCollection);
+    overlayCollectionBtn.addEventListener('click', openCollection);
+    closeCollectionBtn.addEventListener('click', closeCollection);
+    refreshBtn.addEventListener('click', restartAfterError);
+    resetBtn.addEventListener('click', resetCollection);
+    resumeBrightnessBtn.addEventListener('click', resumeAfterBrightness);
+    collectionModal.addEventListener('click', onCollectionBackdropClick);
+    document.addEventListener('keydown', onGlobalKeydown);
+
+    function loadCollection() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        return raw ? JSON.parse(raw) : [];
+      } catch (error) {
+        return [];
+      }
+    }
+
+    function saveCollection() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.collected));
+    }
+
+    function getCollectedCount() {
+      return state.collected.filter((key) => key !== 'fakeFinal').length;
+    }
+
+    function unlockEnding(key) {
+      if (!state.collected.includes(key)) {
+        state.collected.push(key);
+        saveCollection();
+        return true;
+      }
+      return false;
+    }
+
+    function resetCollection() {
+      if (!confirm('정말 기록을 초기화할까요? 저장된 결과가 모두 삭제됩니다.')) return;
+      state.collected = [];
+      saveCollection();
+      renderCollection();
+      renderUI();
+      setMessage('기록이 초기화되었습니다. 새 세션부터 다시 누적됩니다.');
+    }
+
+    function onMouseMove(event) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = WIDTH / rect.width;
+      const scaleY = HEIGHT / rect.height;
+      state.mouseX = (event.clientX - rect.left) * scaleX;
+      state.mouseY = (event.clientY - rect.top) * scaleY;
+    }
+
+    function onTouchMove(event) {
+      event.preventDefault();
+      const touch = event.touches[0];
+      if (!touch) return;
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = WIDTH / rect.width;
+      const scaleY = HEIGHT / rect.height;
+      state.mouseX = (touch.clientX - rect.left) * scaleX;
+      state.mouseY = (touch.clientY - rect.top) * scaleY;
+    }
+
+    function chooseRoute() {
+      const index = (state.attempts - 1) % ROUTES.length;
+      return ROUTES[index];
+    }
+
+    function publicRouteLabel(route) {
+      switch (route) {
+        case 'normal': return '기본 패턴';
+        case 'instant': return '즉발 패턴';
+        case 'hope': return '희망 패턴';
+        case 'pattern': return '학습 패턴';
+        case 'growth': return '성장 패턴';
+        case 'reward': return '오류 창 패턴';
+        case 'hudDrop': return 'UI 낙하 패턴';
+        case 'bigBullet': return '대형 탄환 패턴';
+        case 'drift': return '입력 오차 패턴';
+        case 'darkness': return '암전 패턴';
+        case 'wall': return '안전지대 패턴';
+        case 'error59': return '시간 단축 패턴';
+        default: return '대기';
+      }
+    }
+
+    function getSessionTarget() {
+      return state.currentRoute === 'error59' ? 30 : SURVIVAL_TARGET;
+    }
+
+    function getEndingTitle(key) {
+      const data = ENDINGS[key];
+      return data ? data.id + ': ' + data.name : key;
+    }
+
+    function endRunByKey(key) {
+      const data = ENDINGS[key];
+      if (!data) return;
+      endRun(key, getEndingTitle(key), data.description);
+    }
+
+    function setMessage(text) {
+      messageText.textContent = text;
+    }
+
+    function startGame() {
+      state.attempts += 1;
+      state.running = true;
+      state.time = 0;
+      state.displayedTime = 0;
+      state.level = 1;
+      state.bullets = [];
+      state.particles = [];
+      state.playerRadius = 10;
+      state.playerX = WIDTH / 2;
+      state.playerY = HEIGHT / 2;
+      state.mouseX = WIDTH / 2;
+      state.mouseY = HEIGHT / 2;
+      state.currentRoute = chooseRoute();
+      state.lastTimestamp = 0;
+      state.darknessAlpha = 0;
+      state.paused = false;
+      state.pauseReason = 'none';
+      state.darknessAdjusted = false;
+      state.darknessPauseTriggered = false;
+      state.instantTriggered = false;
+      state.hopeTrapPhase = 0;
+      state.patternWaveIndex = -1;
+      state.hudDropWave = -1;
+      state.hudDropWarningShown = false;
+      state.growthWarningShown = false;
+      state.driftWarningShown = false;
+      state.wallPhase = 0;
+      state.wallGapIndex = 0;
+      state.rewardWarningShown = false;
+      state.rewardTrapPhase = 0;
+      state.bigBulletSpawned = false;
+      state.bigBulletWarningShown = false;
+      state.bigBulletTrapPhase = 0;
+      state.errorPulseCount = -1;
+      state.errorTriggered = false;
+      startOverlay.style.display = 'none';
+      resultOverlay.style.display = 'none';
+      errorModal.style.display = 'none';
+      brightnessModal.style.display = 'none';
+      collectionModal.style.display = 'none';
+      if (state.currentRoute === 'error59') {
+        setMessage('시스템 안정성 점검으로 이번 세션 목표 시간이 30초로 조정되었습니다. 30초만 버티면 됩니다.');
+      } else {
+        setMessage(publicRouteLabel(state.currentRoute) + ' 분석 시작. 초반 흐름을 읽고 안전 구간을 확보하세요.');
+      }
+      renderUI();
+      requestAnimationFrame(loop);
+    }
+
+    function restartAfterError() {
+      errorModal.style.display = 'none';
+      endRunByKey('error59');
+    }
+
+    function openCollection() {
+      if (state.running && !state.paused) {
+        state.paused = true;
+        state.pauseReason = 'collection';
+        state.lastTimestamp = 0;
+      }
+      renderCollection();
+      collectionModal.style.display = 'flex';
+      renderUI();
+    }
+
+    function closeCollection() {
+      collectionModal.style.display = 'none';
+      if (state.pauseReason === 'collection') {
+        state.paused = false;
+        state.pauseReason = 'none';
+        state.lastTimestamp = 0;
+        renderUI();
+      }
+    }
+
+    function onCollectionBackdropClick(event) {
+      if (event.target === collectionModal) {
+        closeCollection();
+      }
+    }
+
+    function onGlobalKeydown(event) {
+      if (event.key !== 'Escape') return;
+      if (collectionModal.style.display === 'flex') {
+        closeCollection();
+      }
+    }
+
+    function pauseForBrightnessAdjustment() {
+      if (state.paused) return;
+      state.paused = true;
+      state.pauseReason = 'brightness';
+      state.darknessPauseTriggered = true;
+      brightnessModal.style.display = 'flex';
+      setMessage('화면이 지나치게 어두워졌습니다. 디바이스 밝기를 올린 뒤 계속 진행하세요.');
+      renderUI();
+    }
+
+    function resumeAfterBrightness() {
+      if (state.pauseReason !== 'brightness') return;
+      state.paused = false;
+      state.pauseReason = 'none';
+      state.darknessAdjusted = true;
+      state.lastTimestamp = 0;
+      brightnessModal.style.display = 'none';
+      setMessage('밝기 조정을 마쳤습니다. 테스트를 다시 시작합니다.');
+      renderUI();
+    }
+
+    function renderCollection() {
+      collectionGrid.innerHTML = '';
+      const list = ['normalFail', 'instant', 'hope', 'pattern', 'growth', 'error59', 'reward', 'hudDrop', 'drift', 'darkness', 'wall', 'bigBullet', 'fakeFinal'];
+      list.forEach((key) => {
+        const data = ENDINGS[key];
+        const unlocked = state.collected.includes(key);
+        const card = document.createElement('div');
+        card.className = 'end-card ' + (unlocked ? 'unlocked' : 'locked');
+        const name = unlocked ? data.name : key === 'fakeFinal' ? data.name : '???';
+        const description = unlocked ? data.description : (key === 'fakeFinal' ? data.description : '잠긴 기록입니다. 조건을 만족하면 상세 정보가 표시됩니다.');
+        const footerText = unlocked
+          ? '기록 저장 완료'
+          : key === 'fakeFinal'
+            ? '조건: ' + data.unlockHint
+            : '조건: 비공개';
+        const stateText = unlocked ? '획득 완료' : key === 'fakeFinal' ? '최종 기록' : '잠김';
+        card.innerHTML = `
+          <div class="end-id">${data.id}</div>
+          <div class="end-state">${stateText}</div>
+          <div class="end-name">${name}</div>
+          <div class="end-desc">${description}</div>
+          <div class="footer-note">${footerText}</div>
+        `;
+        collectionGrid.appendChild(card);
+      });
+    }
+
+    function updateLevel() {
+      if (state.time < 8) state.level = 1;
+      else if (state.time < 18) state.level = 2;
+      else if (state.time < 30) state.level = 3;
+      else if (state.time < 44) state.level = 4;
+      else if (state.time < 54) state.level = 5;
+      else state.level = 6;
+    }
+
+    function updateDisplayedTime(delta) {
+      const target = getSessionTarget();
+      if (state.currentRoute !== 'error59') {
+        state.displayedTime = Math.min(target, state.time);
+        return;
+      }
+      if (state.time < 20) {
+        state.displayedTime = state.time;
+      } else {
+        if (state.displayedTime < 20) state.displayedTime = 20;
+        const slowProgress = Math.min(1, (state.time - 20) / 12);
+        const rate = 1 - 0.6 * Math.pow(slowProgress, 1.6);
+        state.displayedTime += delta * rate;
+      }
+      if ((state.displayedTime > 29.02 || state.time > 36) && !state.errorTriggered) {
+        state.errorTriggered = true;
+        state.running = false;
+        errorModal.style.display = 'flex';
+        setMessage('시간 데이터 예외가 감지되었습니다. 세션을 정리하는 중입니다.');
+      }
+    }
+
+    function spawnBullet(x, y, vx, vy, r, color) {
+      state.bullets.push({ x, y, vx, vy, r, color: color || 'rgba(255,255,255,0.95)' });
+    }
+
+    function spawnRing(count, speed, radius, offset) {
+      for (let i = 0; i < count; i += 1) {
+        const angle = (Math.PI * 2 * i) / count + (offset || 0);
+        spawnBullet(WIDTH / 2, HEIGHT / 2, Math.cos(angle) * speed, Math.sin(angle) * speed, radius, 'rgba(125,211,252,0.95)');
+      }
+    }
+
+    function spawnHudDropBullet(text, slotIndex, waveIndex) {
+      const slots = [
+        { x: 110, vx: 36 },
+        { x: 248, vx: -28 },
+        { x: 404, vx: 24 },
+        { x: WIDTH - 188, vx: -34 }
+      ];
+      const slot = slots[slotIndex % slots.length];
+      const width = Math.min(340, Math.max(150, 56 + text.length * 16));
+      const height = 48;
+      state.bullets.push({
+        kind: 'hudDrop',
+        x: slot.x,
+        y: 46,
+        vx: slot.vx + Math.sin(waveIndex * 1.2) * 18,
+        vy: 248 + waveIndex * 12,
+        w: width,
+        h: height,
+        r: Math.max(width, height) * 0.55,
+        text,
+        color: 'rgba(15,23,42,0.96)',
+        border: 'rgba(226,232,240,0.82)',
+        textColor: '#f8fafc'
+      });
+    }
+
+    function spawnNormalPattern(delta) {
+      const density = 0.8 + state.level * 0.65;
+      const speedBase = 120 + state.time * 7 + state.level * 16;
+      if (Math.random() < density * delta) {
+        const side = Math.floor(Math.random() * 4);
+        let x = 0;
+        let y = 0;
+        if (side === 0) { x = -20; y = Math.random() * HEIGHT; }
+        if (side === 1) { x = WIDTH + 20; y = Math.random() * HEIGHT; }
+        if (side === 2) { x = Math.random() * WIDTH; y = -20; }
+        if (side === 3) { x = Math.random() * WIDTH; y = HEIGHT + 20; }
+        const angle = Math.atan2(state.playerY - y, state.playerX - x) + (Math.random() - 0.5) * 0.6;
+        const speed = speedBase + Math.random() * 90;
+        spawnBullet(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, 8 + Math.random() * 8, 'rgba(248,250,252,0.92)');
+      }
+      if (state.time > 18 && Math.random() < 0.55 * delta) {
+        spawnRing(8 + state.level * 2, 120 + state.level * 20, 8, state.time * 0.6);
+      }
+      if (state.time > 38 && Math.random() < 0.38 * delta) {
+        const y = Math.random() * HEIGHT;
+        for (let i = 0; i < 7; i += 1) {
+          spawnBullet(-40 - i * 30, y + i * 18, 280 + state.time * 4, 0, 10, 'rgba(251,191,36,0.95)');
+        }
+      }
+    }
+
+    function getPlayerTarget() {
+      let targetX = state.mouseX;
+      let targetY = state.mouseY;
+
+      if (state.currentRoute === 'drift' && state.time > 9) {
+        const strength = Math.min(1, (state.time - 9) / 10);
+        targetX += Math.sin(state.time * 1.55) * (40 + 170 * strength);
+        targetY += Math.cos(state.time * 1.18) * (24 + 120 * strength);
+        if (state.time > 17) {
+          targetX += (WIDTH / 2 - state.mouseX) * 0.16 * strength;
+          targetY += (HEIGHT / 2 - state.mouseY) * 0.12 * strength;
+        }
+      }
+
+      return { x: targetX, y: targetY };
+    }
+
+    function updateRoute(delta) {
+      if (state.currentRoute === 'normal') {
+        spawnNormalPattern(delta);
+        return;
+      }
+
+      if (state.currentRoute === 'instant') {
+        if (state.time < 0.7) {
+          hudHint.textContent = '시작 신호 대기 중';
+        } else if (state.time < 1.05) {
+          hudHint.textContent = '초기 패턴이 즉시 주입됩니다';
+        } else {
+          hudHint.textContent = '회피 경로가 열리기 전에 닫힙니다';
+        }
+        if (state.time > 0.92 && !state.instantTriggered) {
+          state.instantTriggered = true;
+          const targetX = Math.max(160, Math.min(WIDTH - 160, state.playerX));
+          for (let i = -2; i <= 2; i += 1) {
+            spawnBullet(targetX + i * 36, -90, 0, 1680, 18, 'rgba(251,113,133,0.98)');
+          }
+          spawnBullet(-90, state.playerY - 24, 1320, 0, 16, 'rgba(251,191,36,0.96)');
+          spawnBullet(WIDTH + 90, state.playerY + 24, -1320, 0, 16, 'rgba(251,191,36,0.96)');
+        }
+        return;
+      }
+
+      if (state.currentRoute === 'hope') {
+        spawnNormalPattern(delta * (state.time < 12.8 ? 0.46 : state.time < 15 ? 0.12 : 0.08));
+        if (state.time < 9.6) {
+          hudHint.textContent = '밀도가 낮게 유지됩니다';
+        } else if (state.time < 12.8) {
+          hudHint.textContent = '이 정도면 끝까지 갈 수 있어 보입니다';
+        } else if (state.time < 15.1) {
+          hudHint.textContent = '거의 다 정리된 것처럼 보입니다';
+        } else {
+          hudHint.textContent = '안쪽에서 닫히는 패턴이 시작됩니다';
+        }
+
+        if (state.time > 12.9 && state.hopeTrapPhase === 0) {
+          state.hopeTrapPhase = 1;
+          setMessage('패턴이 안정화되었습니다. 이 흐름이면 끝까지 갈 수 있습니다.');
+        }
+
+        if (state.time > 15.1 && state.hopeTrapPhase === 1) {
+          state.hopeTrapPhase = 2;
+          const centerX = Math.max(220, Math.min(WIDTH - 220, state.playerX));
+          const centerY = Math.max(180, Math.min(HEIGHT - 180, state.playerY));
+          for (let i = 0; i < 14; i += 1) {
+            const angle = (Math.PI * 2 * i) / 14;
+            const startX = centerX + Math.cos(angle) * 240;
+            const startY = centerY + Math.sin(angle) * 240;
+            const speed = i % 2 === 0 ? 300 : 360;
+            spawnBullet(startX, startY, -Math.cos(angle) * speed, -Math.sin(angle) * speed, 14, 'rgba(251,191,36,0.98)');
+          }
+          for (const angle of [Math.PI / 4, (Math.PI * 3) / 4, (Math.PI * 5) / 4, (Math.PI * 7) / 4]) {
+            spawnBullet(centerX + Math.cos(angle) * 310, centerY + Math.sin(angle) * 310, -Math.cos(angle) * 520, -Math.sin(angle) * 520, 18, 'rgba(251,113,133,0.98)');
+          }
+        }
+        return;
+      }
+
+      if (state.currentRoute === 'pattern') {
+        const wave = Math.floor((state.time - 2.4) / 2.75);
+        if (wave < 0) {
+          spawnNormalPattern(delta * 0.1);
+        }
+        if (wave > 4) {
+          spawnNormalPattern(delta * 0.12);
+        }
+        hudHint.textContent = wave < 1
+          ? '반복 패턴 분석 중'
+          : wave < 4
+            ? '같은 구조가 다시 나옵니다'
+            : '방금 외운 경로를 그대로 유지하세요';
+
+        if (wave >= 0 && wave < 5 && wave !== state.patternWaveIndex) {
+          state.patternWaveIndex = wave;
+          const betrayed = wave === 4;
+          const gapIndex = betrayed ? 10 : 4;
+          const safeSpan = betrayed ? 2 : 3;
+
+          for (const speed of [155, 220, 290]) {
+            const offset = betrayed ? Math.PI / 20 : 0;
+            for (let i = 0; i < 20; i += 1) {
+              const safe = i >= gapIndex && i < gapIndex + safeSpan;
+              if (safe) continue;
+              const angle = (Math.PI * 2 * i) / 20 + offset;
+              const radius = speed === 155 ? 11 : speed === 220 ? 9 : 8;
+              spawnBullet(WIDTH / 2, HEIGHT / 2, Math.cos(angle) * speed, Math.sin(angle) * speed, radius, 'rgba(125,211,252,0.95)');
+            }
+          }
+
+          if (wave === 2) {
+            setMessage('반복 패턴 분석 완료. 이제 보입니다.');
+          }
+
+          if (betrayed) {
+            const rememberedAngle = ((4 + 1.5) / 20) * Math.PI * 2;
+            for (const speed of [250, 340, 430]) {
+              spawnBullet(
+                WIDTH / 2,
+                HEIGHT / 2,
+                Math.cos(rememberedAngle) * speed,
+                Math.sin(rememberedAngle) * speed,
+                10,
+                'rgba(251,113,133,0.98)'
+              );
+            }
+            setMessage('방금 외운 길이 마지막 한 번 바뀝니다.');
+          }
+        }
+        return;
+      }
+
+      if (state.currentRoute === 'hudDrop') {
+        spawnNormalPattern(delta * (state.time < 8.2 ? 0.3 : state.time < 13 ? 0.12 : 0.08));
+        if (state.time < 7.8) {
+          hudHint.textContent = '상단 인터페이스 동기화 중';
+        } else if (state.time < 10.4) {
+          hudHint.textContent = '상단 인터페이스가 흔들립니다';
+        } else {
+          hudHint.textContent = '표시 요소가 아래로 떨어집니다';
+        }
+
+        if (state.time > 7.9 && !state.hudDropWarningShown) {
+          state.hudDropWarningShown = true;
+          setMessage('상단 인터페이스 고정이 풀리기 시작합니다.');
+        }
+
+        const wave = Math.floor((state.time - 8.2) / 0.72);
+        if (wave >= 0 && wave < 10 && wave !== state.hudDropWave) {
+          state.hudDropWave = wave;
+          const labels = [
+            hudTime.textContent || '08.20초',
+            hudLevel.textContent || 'LV 2',
+            hudMode.textContent || publicRouteLabel(state.currentRoute),
+            hudHint.textContent || '표시 요소가 아래로 떨어집니다'
+          ];
+          const primarySlot = wave % 4;
+          spawnHudDropBullet(labels[primarySlot], primarySlot, wave);
+
+          if (wave >= 4) {
+            const secondarySlot = (primarySlot + 2 + (wave % 2)) % 4;
+            spawnHudDropBullet(labels[secondarySlot], secondarySlot, wave + 0.5);
+          }
+
+          if (wave >= 7) {
+            spawnRing(8, 155, 8, state.time * 0.34);
+          }
+        }
+        return;
+      }
+
+      if (state.currentRoute === 'bigBullet') {
+        if (state.time < 4.8) {
+          spawnNormalPattern(delta * 0.72);
+          hudHint.textContent = '전방 반응이 커지고 있습니다';
+        }
+
+        if (state.time > 4.8 && !state.bigBulletWarningShown) {
+          state.bigBulletWarningShown = true;
+          setMessage('전방에서 대형 반응이 감지되었습니다. 회피 경로를 재조정하세요.');
+        }
+
+        if (state.time > 4.8 && state.time < 5.6) {
+          hudHint.textContent = '대형 객체 접근 경고';
+        } else if (state.time >= 5.6 && state.time < 6.5) {
+          hudHint.textContent = '생각보다 훨씬 빠르게 커집니다';
+        } else if (state.time >= 6.5) {
+          hudHint.textContent = '남은 탈출 경로까지 닫히기 시작합니다';
+        }
+
+        if (state.time > 5.4 && !state.bigBulletSpawned) {
+          state.bigBulletSpawned = true;
+          state.bullets.push({
+            kind: 'behemoth',
+            x: WIDTH + 150,
+            y: Math.max(140, Math.min(HEIGHT - 140, state.playerY)),
+            vx: -245,
+            vy: 0,
+            r: 42,
+            growth: 520,
+            maxR: Math.min(WIDTH, HEIGHT) * 0.92,
+            color: 'rgba(251,113,133,0.94)'
+          });
+        }
+
+        if (state.time > 6.18 && state.bigBulletTrapPhase === 0) {
+          state.bigBulletTrapPhase = 1;
+          const exitY = Math.max(110, Math.min(HEIGHT - 110, state.playerY));
+          for (let i = -2; i <= 2; i += 1) {
+            spawnBullet(-90, exitY + i * 62, 980, 0, 16, 'rgba(251,191,36,0.96)');
+          }
+          setMessage('외곽 회피 경로가 차단됩니다.');
+        }
+        return;
+      }
+
+      if (state.currentRoute === 'darkness') {
+        spawnNormalPattern(delta * 0.74);
+        if (!state.darknessAdjusted) {
+          state.darknessAlpha = Math.min(0.82, state.time / 15);
+          if (state.time > 8.6 && !state.darknessPauseTriggered) {
+            pauseForBrightnessAdjustment();
+            return;
+          }
+          hudHint.textContent = state.time > 6 ? '시야가 조금씩 줄어듭니다' : '주변 광량이 낮아지고 있습니다';
+        } else {
+          state.darknessAlpha = Math.min(0.98, 0.32 + Math.max(0, state.time - 8.6) / 8.6);
+          hudHint.textContent = state.time > 15 ? '밝기를 올려도 어둠이 더 빨라집니다' : '밝기 조정 후 테스트 재개';
+        }
+        if (state.time > 20) {
+          spawnRing(14, 250, 9, state.time);
+        }
+        return;
+      }
+
+      if (state.currentRoute === 'growth') {
+        spawnNormalPattern(delta * (state.time < 16 ? 0.9 : 0.84));
+        if (state.time < 11) {
+          state.playerRadius = 10;
+          hudHint.textContent = '기본 패턴 분석 중';
+        } else if (state.time < 16) {
+          state.playerRadius = 10 + (state.time - 11) * 0.7;
+          hudHint.textContent = '기체 외곽선이 조금 퍼집니다';
+        } else {
+          state.playerRadius = 13.5 + (state.time - 16) * 3.9;
+          hudHint.textContent = state.time < 21 ? '기체가 서서히 커지고 있습니다' : '피격 판정이 지나치게 정직해집니다';
+        }
+        if (state.time > 14.5 && !state.growthWarningShown) {
+          state.growthWarningShown = true;
+          setMessage('외곽 충돌 반응이 비정상적으로 증가하고 있습니다.');
+        }
+        return;
+      }
+
+      if (state.currentRoute === 'drift') {
+        spawnNormalPattern(delta * (state.time < 14 ? 0.88 : 0.8));
+        if (state.time < 9) {
+          hudHint.textContent = '입력 지연 없음';
+        } else if (state.time < 14) {
+          hudHint.textContent = '입력 오차가 천천히 누적됩니다';
+        } else {
+          hudHint.textContent = '포인터와 기체 위치가 점점 어긋납니다';
+        }
+        if (state.time > 10.8 && !state.driftWarningShown) {
+          state.driftWarningShown = true;
+          setMessage('기체 추적 오차가 발생하기 시작합니다.');
+        }
+        if (state.time > 19) {
+          spawnRing(12, 220, 9, state.time * 0.72);
+        }
+        return;
+      }
+
+      if (state.currentRoute === 'wall') {
+        spawnNormalPattern(delta * (state.time < 10.6 ? 0.36 : 0.22));
+        hudHint.textContent = state.wallPhase === 0 ? '안전 구간을 탐색하는 중입니다' : hudHint.textContent;
+        if (state.time > 10.6 && state.wallPhase === 0) {
+          state.wallPhase = 1;
+          state.wallGapIndex = Math.max(3, Math.min(15, Math.floor(state.playerY / 32) - 1));
+          for (let i = 0; i < 22; i += 1) {
+            const skip = i >= state.wallGapIndex && i <= state.wallGapIndex + 3;
+            if (skip) continue;
+            const y = 12 + i * 32;
+            spawnBullet(-100, y, 760, 0, 15, 'rgba(244,114,182,0.98)');
+            spawnBullet(WIDTH + 100, y, -760, 0, 15, 'rgba(244,114,182,0.98)');
+          }
+          hudHint.textContent = '중앙에 안전 통로가 형성됩니다';
+          setMessage('정면에 넓은 안전 통로가 탐지되었습니다.');
+        }
+        if (state.time > 11.7 && state.wallPhase === 1) {
+          hudHint.textContent = '이 통로면 충분해 보입니다';
+        }
+        if (state.time > 12.32 && state.wallPhase === 1) {
+          state.wallPhase = 2;
+          const laneY = 12 + (state.wallGapIndex + 1.5) * 32;
+          for (let i = state.wallGapIndex + 1; i <= state.wallGapIndex + 2; i += 1) {
+            const y = 12 + i * 32 + 4;
+            spawnBullet(-140, y, 1220, 0, 18, 'rgba(251,191,36,0.98)');
+            spawnBullet(WIDTH + 140, y, -1220, 0, 18, 'rgba(251,191,36,0.98)');
+          }
+          spawnBullet(WIDTH / 2 - 40, laneY - 190, 0, 860, 15, 'rgba(251,191,36,0.98)');
+          spawnBullet(WIDTH / 2 + 40, laneY + 190, 0, -860, 15, 'rgba(251,191,36,0.98)');
+          hudHint.textContent = '방금 보였던 안전 통로가 닫힙니다';
+          setMessage('안전 구간이 다시 계산됩니다.');
+        }
+        if (state.time > 13.06 && state.wallPhase === 2) {
+          state.wallPhase = 3;
+          const trapX = Math.max(220, Math.min(WIDTH - 220, state.playerX));
+          for (let i = 0; i < 8; i += 1) {
+            const x = trapX - 196 + i * 56;
+            spawnBullet(x, -80, 0, 980, 14, 'rgba(251,191,36,0.96)');
+            spawnBullet(x + 28, HEIGHT + 80, 0, -980, 14, 'rgba(251,191,36,0.96)');
+          }
+          hudHint.textContent = '빠져나온 구간도 다시 닫힙니다';
+          setMessage('안전 구간이 한 번 더 재계산됩니다.');
+        }
+        return;
+      }
+
+      if (state.currentRoute === 'reward') {
+        spawnNormalPattern(delta * 0.76);
+        if (state.time < 13.2) {
+          hudHint.textContent = '생존 데이터 집계 중';
+        } else if (state.time < 17.8) {
+          hudHint.textContent = '오류창 출력 중';
+        } else {
+          hudHint.textContent = '오류창 종료 직후 패턴이 재개됩니다';
+        }
+
+        if (state.time > 13.1 && !state.rewardWarningShown) {
+          state.rewardWarningShown = true;
+          setMessage('시스템 상태를 확인하는 중입니다.');
+        }
+
+        if (state.time > 15.1 && state.rewardTrapPhase === 0) {
+          state.rewardTrapPhase = 1;
+          for (let i = 0; i < 10; i += 1) {
+            const x = 80 + i * 125;
+            spawnBullet(x, -40, 0, 320, 12, 'rgba(250,204,21,0.95)');
+            spawnBullet(x + 40, HEIGHT + 40, 0, -320, 12, 'rgba(250,204,21,0.95)');
+          }
+        }
+
+        if (state.time > 16.4 && state.rewardTrapPhase === 1) {
+          state.rewardTrapPhase = 2;
+          spawnRing(14, 210, 9, state.time * 0.5);
+        }
+        return;
+      }
+
+      if (state.currentRoute === 'error59') {
+        spawnNormalPattern(delta * (state.time < 26 ? 0.08 : 0.12));
+        if (state.displayedTime < 20) {
+          hudHint.textContent = '이번 세션은 30초로 단축됩니다';
+        } else if (state.displayedTime < 27.2) {
+          hudHint.textContent = '시간이 조금씩 느려지기 시작합니다';
+        } else {
+          hudHint.textContent = '타이머 응답이 불안정합니다';
+        }
+        const pulse = Math.floor((state.displayedTime - 27.5) / 0.5);
+        if (pulse >= 0 && pulse < 3 && pulse !== state.errorPulseCount) {
+          state.errorPulseCount = pulse;
+          spawnRing(10 + pulse * 2, 145 + pulse * 20, 8, state.time * 0.32);
+        }
+      }
+    }
+
+    function updateBullets(delta) {
+      for (const bullet of state.bullets) {
+        bullet.x += bullet.vx * delta;
+        bullet.y += bullet.vy * delta;
+        if (bullet.growth) {
+          bullet.r = Math.min(bullet.maxR || bullet.r, bullet.r + bullet.growth * delta);
+        }
+      }
+      state.bullets = state.bullets.filter((bullet) => {
+        const margin = bullet.r + 120;
+        return bullet.x > -margin && bullet.x < WIDTH + margin && bullet.y > -margin && bullet.y < HEIGHT + margin;
+      });
+    }
+
+    function updatePlayer(delta) {
+      const target = getPlayerTarget();
+      const lerp = 1 - Math.pow(0.000001, delta);
+      state.playerX += (target.x - state.playerX) * lerp;
+      state.playerY += (target.y - state.playerY) * lerp;
+      state.playerX = Math.max(state.playerRadius, Math.min(WIDTH - state.playerRadius, state.playerX));
+      state.playerY = Math.max(state.playerRadius, Math.min(HEIGHT - state.playerRadius, state.playerY));
+    }
+
+    function getTriggeredEndingKey() {
+      switch (state.currentRoute) {
+        case 'normal':
+          return 'normalFail';
+        case 'instant':
+          return state.instantTriggered ? 'instant' : null;
+        case 'hope':
+          return state.hopeTrapPhase >= 2 ? 'hope' : null;
+        case 'pattern':
+          return state.patternWaveIndex >= 4 ? 'pattern' : null;
+        case 'hudDrop':
+          return state.hudDropWave >= 0 ? 'hudDrop' : null;
+        case 'bigBullet':
+          return state.bigBulletSpawned ? 'bigBullet' : null;
+        case 'darkness':
+          return state.darknessPauseTriggered ? 'darkness' : null;
+        case 'growth':
+          return state.playerRadius >= 16 ? 'growth' : null;
+        case 'drift':
+          return state.driftWarningShown ? 'drift' : null;
+        case 'wall':
+          return state.wallPhase >= 2 ? 'wall' : null;
+        case 'reward':
+          return state.rewardTrapPhase >= 1 ? 'reward' : null;
+        case 'error59':
+          return null;
+        default:
+          return null;
+      }
+    }
+
+    function hitTest() {
+      for (const bullet of state.bullets) {
+        let collided = false;
+        if (bullet.kind === 'hudDrop') {
+          const halfW = bullet.w / 2;
+          const halfH = bullet.h / 2;
+          const closestX = Math.max(bullet.x - halfW, Math.min(state.playerX, bullet.x + halfW));
+          const closestY = Math.max(bullet.y - halfH, Math.min(state.playerY, bullet.y + halfH));
+          const dx = state.playerX - closestX;
+          const dy = state.playerY - closestY;
+          collided = dx * dx + dy * dy < state.playerRadius * state.playerRadius;
+        } else {
+          const dx = bullet.x - state.playerX;
+          const dy = bullet.y - state.playerY;
+          const distance = Math.hypot(dx, dy);
+          collided = distance < bullet.r + state.playerRadius;
+        }
+        if (collided) {
+          const endingKey = getTriggeredEndingKey();
+          if (endingKey) {
+            endRunByKey(endingKey);
+          } else {
+            endRunByKey('normalFail');
+          }
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function traceRoundedRect(x, y, w, h, radius) {
+      const r = Math.min(radius, w / 2, h / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+    }
+
+    function showResultOverlay(title, description, footerText) {
+      resultOverlay.style.display = 'flex';
+      resultOverlay.innerHTML = `
+        <div class="overlay-card">
+          <div class="hero-title" style="font-size:36px;">${title}</div>
+          <p class="hero-sub">${description}</p>
+          <div class="hero-actions">
+            <button class="primary-btn" id="retryResultBtn">다시 시작</button>
+            <button class="secondary-btn" id="openCollectionResultBtn">기록 보관함</button>
+          </div>
+          <p class="footer-note">${footerText}</p>
+        </div>
+      `;
+      document.getElementById('retryResultBtn').addEventListener('click', startGame);
+      document.getElementById('openCollectionResultBtn').addEventListener('click', openCollection);
+    }
+
+    function endRun(key, title, description) {
+      state.running = false;
+      state.paused = false;
+      state.pauseReason = 'none';
+      const isNewUnlock = unlockEnding(key);
+      renderUI();
+      showResultOverlay(
+        title,
+        description,
+        isNewUnlock ? '획득한 결과는 보관함에 자동 저장됩니다.' : '이미 보유한 기록입니다. 새 해금은 없습니다.'
+      );
+      setMessage(
+        isNewUnlock
+          ? title + ' 기록이 저장되었습니다. 다른 패턴에서도 결과를 확인해 보세요.'
+          : title + ' 기록은 이미 보유 중입니다.'
+      );
+    }
+
+    function endSessionWithoutUnlock(title, description, footerText, messageTextValue) {
+      state.running = false;
+      state.paused = false;
+      state.pauseReason = 'none';
+      renderUI();
+      showResultOverlay(title, description, footerText || '이번 세션은 참고 기록으로만 종료되었습니다.');
+      setMessage(messageTextValue || '60초 도달로 세션이 종료되었습니다. 다음 패턴에서 다른 기록을 확인해 보세요.');
+    }
+
+    function finishRunAtTarget() {
+      if (!state.running) return;
+      if (state.currentRoute === 'normal') {
+        endRunByKey('normalFail');
+        return;
+      }
+      endSessionWithoutUnlock(
+        '60.00초 기록 달성',
+        '예정된 사고 구간을 넘겼습니다. 이번 세션은 결과 확인용으로 종료됩니다.',
+        '이번 세션은 참고 기록으로만 종료되었습니다.',
+        '60초 도달로 세션이 종료되었습니다. 다음 패턴에서 다른 기록을 확인해 보세요.'
+      );
+    }
+
+    function drawBackground() {
+      ctx.clearRect(0, 0, WIDTH, HEIGHT);
+      const gradient = ctx.createLinearGradient(0, 0, 0, HEIGHT);
+      gradient.addColorStop(0, '#0f172a');
+      gradient.addColorStop(1, '#020617');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+      ctx.save();
+      ctx.globalAlpha = 0.08;
+      for (let x = 0; x < WIDTH; x += 40) {
+        ctx.fillStyle = '#e2e8f0';
+        ctx.fillRect(x, 0, 1, HEIGHT);
+      }
+      for (let y = 0; y < HEIGHT; y += 40) {
+        ctx.fillRect(0, y, WIDTH, 1);
+      }
+      ctx.restore();
+    }
+
+    function drawBullets() {
+      for (const bullet of state.bullets) {
+        if (bullet.kind === 'hudDrop') {
+          const x = bullet.x - bullet.w / 2;
+          const y = bullet.y - bullet.h / 2;
+          ctx.save();
+          ctx.fillStyle = bullet.color;
+          traceRoundedRect(x, y, bullet.w, bullet.h, bullet.h / 2);
+          ctx.fill();
+          ctx.strokeStyle = bullet.border;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.fillStyle = bullet.textColor;
+          ctx.font = '800 22px Arial';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(bullet.text, bullet.x, bullet.y + 1, bullet.w - 24);
+          ctx.restore();
+          continue;
+        }
+        ctx.beginPath();
+        ctx.fillStyle = bullet.color;
+        ctx.arc(bullet.x, bullet.y, bullet.r, 0, Math.PI * 2);
+        ctx.fill();
+
+        if (bullet.growth) {
+          ctx.save();
+          ctx.strokeStyle = 'rgba(254, 202, 202, 0.45)';
+          ctx.lineWidth = 8;
+          ctx.beginPath();
+          ctx.arc(bullet.x, bullet.y, bullet.r + 18, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+    }
+
+    function drawPlayer() {
+      ctx.beginPath();
+      ctx.fillStyle = '#f8fafc';
+      ctx.arc(state.playerX, state.playerY, state.playerRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.strokeStyle = 'rgba(96,165,250,0.9)';
+      ctx.lineWidth = 3;
+      ctx.arc(state.playerX, state.playerY, state.playerRadius + 7, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    function drawDarkness() {
+      if (state.currentRoute !== 'darkness') return;
+      ctx.save();
+      ctx.fillStyle = `rgba(0,0,0,${state.darknessAlpha})`;
+      ctx.fillRect(0, 0, WIDTH, HEIGHT);
+      ctx.restore();
+    }
+
+    function drawDriftGuide() {
+      if (state.currentRoute !== 'drift' || state.time < 10) return;
+      const target = getPlayerTarget();
+      ctx.save();
+      ctx.strokeStyle = 'rgba(96, 165, 250, 0.36)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(target.x, target.y, 18 + Math.sin(state.time * 5) * 4, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(target.x - 16, target.y);
+      ctx.lineTo(target.x + 16, target.y);
+      ctx.moveTo(target.x, target.y - 16);
+      ctx.lineTo(target.x, target.y + 16);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawRewardBanner() {
+      if (state.currentRoute !== 'reward' || state.time < 13.4 || state.time > 18.1) return;
+      const width = 760;
+      const height = 240;
+      const x = (WIDTH - width) / 2;
+      const y = HEIGHT * 0.24;
+      const pulse = 0.92 + Math.sin(state.time * 7) * 0.03;
+
+      ctx.save();
+      ctx.globalAlpha = 0.98;
+      ctx.fillStyle = 'rgba(248,250,252,0.98)';
+      ctx.fillRect(x, y, width, height);
+      ctx.strokeStyle = 'rgba(250,204,21,0.95)';
+      ctx.lineWidth = 6;
+      ctx.strokeRect(x, y, width, height);
+
+      ctx.globalAlpha = pulse;
+      ctx.fillStyle = 'rgba(15,23,42,0.9)';
+      ctx.font = '900 52px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('SYSTEM ERROR', WIDTH / 2, y + 82);
+
+      ctx.fillStyle = 'rgba(15,23,42,0.66)';
+      ctx.font = '700 24px Arial';
+      ctx.fillText('치명적이지 않은 오류를 처리하는 중입니다', WIDTH / 2, y + 132);
+
+      ctx.fillStyle = 'rgba(251,191,36,0.28)';
+      ctx.fillRect(WIDTH / 2 - 180, y + 160, 360, 42);
+      ctx.fillStyle = 'rgba(15,23,42,0.75)';
+      ctx.font = '800 20px Arial';
+      ctx.fillText('복구 중...', WIDTH / 2, y + 188);
+      ctx.restore();
+    }
+
+    function drawTextGuide() {
+      ctx.save();
+      ctx.fillStyle = 'rgba(148,163,184,0.16)';
+      ctx.font = 'bold 74px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(publicRouteLabel(state.currentRoute), WIDTH / 2, HEIGHT / 2 + 26);
+      ctx.restore();
+    }
+
+    function renderScene() {
+      drawBackground();
+      drawTextGuide();
+      drawBullets();
+      drawDriftGuide();
+      drawPlayer();
+      drawDarkness();
+      drawRewardBanner();
+    }
+
+    function renderUI() {
+      const target = getSessionTarget();
+      attemptBadge.textContent = '도전 ' + state.attempts + '회';
+      collectedBadge.textContent = '기록 ' + getCollectedCount() + ' / ' + TOTAL_VISIBLE_COLLECTION;
+      routeBadge.textContent = state.pauseReason === 'collection'
+        ? '상태 기록 확인 중'
+        : state.pauseReason === 'brightness'
+          ? '상태 밝기 조정 중'
+          : state.paused
+            ? '상태 일시정지'
+        : state.running
+          ? '상태 ' + publicRouteLabel(state.currentRoute)
+          : '상태 준비중';
+      progressText.textContent = state.displayedTime.toFixed(2) + ' / ' + target.toFixed(2) + '초';
+      progressFill.style.width = Math.min(100, (state.displayedTime / target) * 100) + '%';
+      levelText.textContent = 'LV ' + state.level;
+      hudTime.textContent = state.displayedTime.toFixed(2) + '초';
+      hudLevel.textContent = 'LV ' + state.level;
+      hudMode.textContent = state.pauseReason === 'collection'
+        ? '기록 확인'
+        : state.pauseReason === 'brightness'
+          ? '밝기 조정'
+          : state.paused
+            ? '일시정지'
+            : state.running
+              ? publicRouteLabel(state.currentRoute)
+              : '대기';
+      topHud.style.opacity = state.currentRoute === 'hudDrop' && state.running && state.hudDropWave >= 0 ? '0.18' : '1';
+    }
+
+    function loop(timestamp) {
+      if (!state.running && !state.paused) {
+        renderScene();
+        renderUI();
+        return;
+      }
+
+      if (state.paused) {
+        renderScene();
+        renderUI();
+        requestAnimationFrame(loop);
+        return;
+      }
+
+      if (!state.lastTimestamp) state.lastTimestamp = timestamp;
+      let delta = (timestamp - state.lastTimestamp) / 1000;
+      if (delta > 0.033) delta = 0.033;
+      state.lastTimestamp = timestamp;
+
+      state.time += delta;
+      updateLevel();
+      updateDisplayedTime(delta);
+
+      if (!state.running) {
+        renderScene();
+        renderUI();
+        return;
+      }
+
+      if (state.currentRoute !== 'error59' && state.time >= getSessionTarget()) {
+        finishRunAtTarget();
+        renderScene();
+        renderUI();
+        return;
+      }
+
+      updatePlayer(delta);
+      updateRoute(delta);
+      if (state.paused) {
+        renderScene();
+        renderUI();
+        requestAnimationFrame(loop);
+        return;
+      }
+      updateBullets(delta);
+      hitTest();
+      renderScene();
+      renderUI();
+
+      if (state.running) requestAnimationFrame(loop);
+    }
+
+    function initialRender() {
+      renderScene();
+      renderUI();
+      renderCollection();
+    }
+
+    initialRender();
+  </script>
+</body>
+</html>
