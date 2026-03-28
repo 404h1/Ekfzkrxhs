@@ -569,16 +569,20 @@ export default function DodgePage() {
     const target = getSessionTarget(g.currentRoute)
     const cap = target - 0.001 // never reach exactly 60 or 30
     if (g.currentRoute !== 'error59') {
-      g.displayedTime = Math.min(cap, g.time)
+      // Always monotonically increasing, never exceed cap
+      const next = Math.min(cap, g.time)
+      g.displayedTime = Math.max(g.displayedTime, next)
       return
     }
     if (g.time < 20) {
-      g.displayedTime = Math.min(cap, g.time)
+      const next = Math.min(cap, g.time)
+      g.displayedTime = Math.max(g.displayedTime, next)
     } else {
       if (g.displayedTime < 20) g.displayedTime = 20
       const slowProgress = Math.min(1, (g.time - 20) / 12)
       const rate = 1 - 0.6 * Math.pow(slowProgress, 1.6)
-      g.displayedTime = Math.min(cap, g.displayedTime + delta * rate)
+      const next = Math.min(cap, g.displayedTime + delta * rate)
+      g.displayedTime = Math.max(g.displayedTime, next)
     }
     if ((g.displayedTime > 29.02 || g.time > 36) && !g.errorTriggered) {
       g.errorTriggered = true
@@ -1080,7 +1084,7 @@ export default function DodgePage() {
     g.bullets = []; g.particles = []; g.trail = []; g.playerRadius = 10
     g.nearMissTimer = 0; g.shakeX = 0; g.shakeY = 0
     g.playerX = WIDTH / 2; g.playerY = HEIGHT / 2; g.mouseX = WIDTH / 2; g.mouseY = HEIGHT / 2
-    g.currentRoute = ROUTES[(g.attempts - 1) % ROUTES.length]
+    g.currentRoute = ROUTES[Math.floor(Math.random() * ROUTES.length)]
     g.lastTimestamp = 0; g.darknessAlpha = 0; g.paused = false; g.pauseReason = 'none'
     g.darknessAdjusted = false; g.darknessPauseTriggered = false
     g.instantTriggered = false; g.hopeTrapPhase = 0; g.patternWaveIndex = -1
@@ -1097,6 +1101,9 @@ export default function DodgePage() {
     }
     setPhase('playing')
     setResultInfo(null)
+    setUiTime('0.000')
+    setUiLevel(1)
+    setUiProgress(0)
     cancelAnimationFrame(animFrameRef.current)
     animFrameRef.current = requestAnimationFrame(loop)
   }, [loop])
@@ -1182,6 +1189,16 @@ export default function DodgePage() {
     canvasCoords(touch.clientX, touch.clientY)
   }, [canvasCoords])
 
+  // ─── Prevent mobile scroll/bounce on touch ────────────
+
+  useEffect(() => {
+    const prevent = (e: TouchEvent) => {
+      if (phase === 'playing') e.preventDefault()
+    }
+    document.addEventListener('touchmove', prevent, { passive: false })
+    return () => document.removeEventListener('touchmove', prevent)
+  }, [phase])
+
   // ─── Keyboard ──────────────────────────────────────────
 
   useEffect(() => {
@@ -1200,6 +1217,25 @@ export default function DodgePage() {
 
   const target = getSessionTarget(uiRoute)
   const isPlaying = phase === 'playing'
+
+  // Hamster speech based on time
+  const timeNum = parseFloat(uiTime) || 0
+  const hamsterSpeech = (() => {
+    if (timeNum < 1) return '파이팅!'
+    if (timeNum < 3) return '쉽죠?'
+    if (timeNum < 6) return '에헤헤~'
+    if (timeNum < 10) return '잘하네!'
+    if (timeNum < 15) return '오?!'
+    if (timeNum < 20) return '헐...'
+    if (timeNum < 25) return '대박'
+    if (timeNum < 30) return 'ㄷㄷ'
+    if (timeNum < 35) return '살려줘'
+    if (timeNum < 40) return '미쳤다'
+    if (timeNum < 45) return 'ㅋㅋㅋ'
+    if (timeNum < 50) return '진짜?!'
+    if (timeNum < 55) return '거의다!'
+    return '!!!'
+  })()
 
   // ─── Render ────────────────────────────────────────────
 
@@ -1227,8 +1263,14 @@ export default function DodgePage() {
           <div className={s.bottomBar}>
             <div className={s.progressRow}>
               <span className={s.progressTime}>{uiTime}</span>
-              <div className={s.bar}>
-                <div className={s.barFill} style={{ width: uiProgress + '%' }} />
+              <div className={s.barCharWrap}>
+                <span className={s.barChar} style={{ left: `calc(${uiProgress}% - 9px)` }}>
+                  <span className={s.barSpeech}>{hamsterSpeech}</span>
+                  🐹
+                </span>
+                <div className={s.bar}>
+                  <div className={s.barFill} style={{ width: uiProgress + '%' }} />
+                </div>
               </div>
               <span className={s.progressTime}>{target.toFixed(0)}s</span>
             </div>
