@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { hasSupabaseConfig, supabase } from '@/lib/db'
 
+/*
+ * These score endpoints stay deliberately small.
+ * The game only needs three backend capabilities:
+ * list leaderboard entries, save a run, and tolerate missing backend config.
+ * Keeping the route handler direct makes deployment and failure behavior easy
+ * to reason about for a jam-style project.
+ */
+
 // GET: top scores — max survival_time per name, sorted DESC
 export async function GET() {
   if (!hasSupabaseConfig) {

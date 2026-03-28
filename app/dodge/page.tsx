@@ -3,6 +3,22 @@
 import { useRef, useState, useCallback, useEffect } from 'react'
 import s from './dodge.module.css'
 
+/*
+ * Zero Trace is shipped as a single client page because the core loop is a
+ * tightly-coupled canvas game: route timing, collision, HUD sabotage, modal
+ * flow, and persistence all react to the same frame state.
+ *
+ * Supporting references:
+ * - /README.md for product/setup overview
+ * - /dodge/README.md for route and ending documentation
+ * - /dodge/dodge_game.html for the archived standalone prototype
+ *
+ * If this grows further, the safest first refactor is:
+ * 1. shared types/constants
+ * 2. route update functions
+ * 3. modal/overlay components
+ */
+
 // ─── Types ───────────────────────────────────────────────
 
 type Route = 'normal' | 'instant' | 'hope' | 'pattern' | 'growth' | 'reward' | 'hudDrop' | 'drift' | 'darkness' | 'wall' | 'bigBullet' | 'error59'
@@ -81,6 +97,16 @@ const ENDINGS: Record<string, EndingData> = {
 
 const COLLECTION_ORDER = ['normalFail', 'instant', 'hope', 'pattern', 'growth', 'error59', 'reward', 'hudDrop', 'drift', 'darkness', 'wall', 'bigBullet', 'fakeFinal']
 const TOTAL_VISIBLE_COLLECTION = 12
+const FAKE_PRIZES = [
+  { emoji: '☕', name: '스타벅스 아메리카노', desc: '따뜻한 아메리카노 1잔 (Tall)', code: 'AFD-2026-COFFEE-XXXX' },
+  { emoji: '🍕', name: '도미노피자 50% 할인', desc: '라지 사이즈 50% 할인 쿠폰', code: 'AFD-2026-PIZZA-XXXX' },
+  { emoji: '🎬', name: 'CGV 영화 관람권', desc: '2D 일반 영화 1매', code: 'AFD-2026-MOVIE-XXXX' },
+  { emoji: '🍦', name: '배스킨라빈스 싱글콘', desc: '싱글 레귤러 아이스크림 1개', code: 'AFD-2026-ICECR-XXXX' },
+  { emoji: '🍔', name: '맥도날드 빅맥 세트', desc: '빅맥 + 후렌치후라이(M) + 콜라(M)', code: 'AFD-2026-BIGMC-XXXX' },
+  { emoji: '🧋', name: '공차 밀크티 L', desc: '타로 밀크티 + 펄 추가', code: 'AFD-2026-GONCH-XXXX' },
+  { emoji: '🎧', name: '에어팟 프로 3', desc: 'Apple AirPods Pro 3 (화이트)', code: 'AFD-2026-AIRPD-XXXX' },
+  { emoji: '💰', name: '현금 100만원', desc: '계좌로 즉시 입금 (세후)', code: 'AFD-2026-MONEY-XXXX' },
+]
 
 // ─── Helpers ─────────────────────────────────────────────
 
@@ -232,7 +258,7 @@ export default function DodgePage() {
 
   const [phase, setPhase] = useState<Phase>('idle')
   const [collected, setCollected] = useState<string[]>([])
-  const [uiMessage, setUiMessage] = useState('살아남으세요. 그게 전부입니다. (아마도)')
+  const [, setUiMessage] = useState('살아남으세요. 그게 전부입니다. (아마도)')
   const [uiTime, setUiTime] = useState('0.00')
   const [uiLevel, setUiLevel] = useState(1)
   const [uiProgress, setUiProgress] = useState(0)
@@ -285,7 +311,7 @@ export default function DodgePage() {
 
   // ─── Canvas rendering helpers ──────────────────────────
 
-  const traceRoundedRect = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, radius: number) => {
+  const traceRoundedRect = useCallback((ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, radius: number) => {
     const r = Math.min(radius, w / 2, h / 2)
     ctx.beginPath()
     ctx.moveTo(x + r, y)
@@ -298,7 +324,7 @@ export default function DodgePage() {
     ctx.lineTo(x, y + r)
     ctx.quadraticCurveTo(x, y, x + r, y)
     ctx.closePath()
-  }
+  }, [])
 
   const drawBackground = (ctx: CanvasRenderingContext2D) => {
     const g = gs.current
@@ -330,7 +356,7 @@ export default function DodgePage() {
     ctx.restore()
   }
 
-  const drawBullets = (ctx: CanvasRenderingContext2D) => {
+  const drawBullets = useCallback((ctx: CanvasRenderingContext2D) => {
     const g = gs.current
     for (const bullet of g.bullets) {
       if (bullet.kind === 'hudDrop') {
@@ -381,7 +407,7 @@ export default function DodgePage() {
         ctx.restore()
       }
     }
-  }
+  }, [traceRoundedRect])
 
   const drawParticles = (ctx: CanvasRenderingContext2D) => {
     const g = gs.current
@@ -447,7 +473,7 @@ export default function DodgePage() {
     ctx.restore()
   }
 
-  const getPlayerTarget = () => {
+  const getPlayerTarget = useCallback(() => {
     const g = gs.current
     let targetX = g.mouseX
     let targetY = g.mouseY
@@ -461,9 +487,9 @@ export default function DodgePage() {
       }
     }
     return { x: targetX, y: targetY }
-  }
+  }, [])
 
-  const drawDriftGuide = (ctx: CanvasRenderingContext2D) => {
+  const drawDriftGuide = useCallback((ctx: CanvasRenderingContext2D) => {
     const g = gs.current
     if (g.currentRoute !== 'drift' || g.time < 10) return
     const target = getPlayerTarget()
@@ -480,7 +506,7 @@ export default function DodgePage() {
     ctx.lineTo(target.x, target.y + 16)
     ctx.stroke()
     ctx.restore()
-  }
+  }, [getPlayerTarget])
 
   const drawRewardBanner = (ctx: CanvasRenderingContext2D) => {
     const g = gs.current
@@ -529,22 +555,22 @@ export default function DodgePage() {
     drawDarkness(ctx)
     drawRewardBanner(ctx)
     ctx.restore()
-  }, [])
+  }, [drawBullets, drawDriftGuide])
 
   // ─── Game logic ────────────────────────────────────────
 
-  const spawnBullet = (x: number, y: number, vx: number, vy: number, r: number, color?: string) => {
+  const spawnBullet = useCallback((x: number, y: number, vx: number, vy: number, r: number, color?: string) => {
     gs.current.bullets.push({ x, y, vx, vy, r, color: color || 'rgba(255,255,255,0.95)' })
-  }
+  }, [])
 
-  const spawnRing = (count: number, speed: number, radius: number, offset?: number) => {
+  const spawnRing = useCallback((count: number, speed: number, radius: number, offset?: number) => {
     for (let i = 0; i < count; i++) {
       const angle = (Math.PI * 2 * i) / count + (offset || 0)
       spawnBullet(WIDTH / 2, HEIGHT / 2, Math.cos(angle) * speed, Math.sin(angle) * speed, radius, 'rgba(125,211,252,0.95)')
     }
-  }
+  }, [spawnBullet])
 
-  const spawnHudDropBullet = (text: string, slotIndex: number, waveIndex: number) => {
+  const spawnHudDropBullet = useCallback((text: string, slotIndex: number, waveIndex: number) => {
     const slots = [
       { x: 110, vx: 36 }, { x: 248, vx: -28 }, { x: 404, vx: 24 }, { x: WIDTH - 188, vx: -34 }
     ]
@@ -557,9 +583,9 @@ export default function DodgePage() {
       w: width, h: height, r: Math.max(width, height) * 0.55,
       text, color: 'rgba(15,23,42,0.96)', border: 'rgba(226,232,240,0.82)', textColor: '#f8fafc'
     })
-  }
+  }, [])
 
-  const spawnNormalPattern = (delta: number) => {
+  const spawnNormalPattern = useCallback((delta: number) => {
     const g = gs.current
     const density = 0.8 + g.level * 0.65
     const speedBase = 120 + g.time * 7 + g.level * 16
@@ -581,7 +607,7 @@ export default function DodgePage() {
       const y = Math.random() * HEIGHT
       for (let i = 0; i < 7; i++) { spawnBullet(-40 - i * 30, y + i * 18, 280 + g.time * 4, 0, 10, 'rgba(251,191,36,0.95)') }
     }
-  }
+  }, [spawnBullet, spawnRing])
 
   const updateLevel = () => {
     const g = gs.current
@@ -616,18 +642,22 @@ export default function DodgePage() {
 
   const updateBullets = (delta: number) => {
     const g = gs.current
-    for (const bullet of g.bullets) {
-      bullet.x += bullet.vx * delta
-      bullet.y += bullet.vy * delta
-      if (bullet.growth) { bullet.r = Math.min(bullet.maxR || bullet.r, bullet.r + bullet.growth * delta) }
-    }
-    g.bullets = g.bullets.filter((b) => {
+    g.bullets = g.bullets
+      .map((bullet) => ({
+        ...bullet,
+        x: bullet.x + bullet.vx * delta,
+        y: bullet.y + bullet.vy * delta,
+        r: bullet.growth
+          ? Math.min(bullet.maxR || bullet.r, bullet.r + bullet.growth * delta)
+          : bullet.r,
+      }))
+      .filter((b) => {
       const margin = b.r + 120
       return b.x > -margin && b.x < WIDTH + margin && b.y > -margin && b.y < HEIGHT + margin
-    })
+      })
   }
 
-  const updatePlayer = (delta: number) => {
+  const updatePlayer = useCallback((delta: number) => {
     const g = gs.current
     const target = getPlayerTarget()
     const bounds = getPlayBounds()
@@ -636,28 +666,32 @@ export default function DodgePage() {
     g.playerY += (target.y - g.playerY) * lerp
     g.playerX = Math.max(bounds.minX + g.playerRadius, Math.min(bounds.maxX - g.playerRadius, g.playerX))
     g.playerY = Math.max(bounds.minY + g.playerRadius, Math.min(bounds.maxY - g.playerRadius, g.playerY))
-    // Trail
-    g.trail.unshift({ x: g.playerX, y: g.playerY, alpha: 1 })
-    if (g.trail.length > 12) g.trail.pop()
-    for (const t of g.trail) t.alpha *= 0.85
-  }
+    g.trail = [{ x: g.playerX, y: g.playerY, alpha: 1 }, ...g.trail]
+      .slice(0, 12)
+      .map((trail) => ({ ...trail, alpha: trail.alpha * 0.85 }))
+  }, [getPlayBounds, getPlayerTarget])
 
   const updateStars = (delta: number) => {
     const g = gs.current
-    for (const star of g.stars) {
-      star.y += star.speed * delta
-      if (star.y > HEIGHT) { star.y = -2; star.x = Math.random() * WIDTH }
-    }
+    g.stars = g.stars.map((star) => {
+      const nextY = star.y + star.speed * delta
+      if (nextY > HEIGHT) {
+        return { ...star, x: Math.random() * WIDTH, y: -2 }
+      }
+      return { ...star, y: nextY }
+    })
   }
 
   const updateParticles = (delta: number) => {
     const g = gs.current
-    for (const p of g.particles) {
-      p.x += p.vx * delta
-      p.y += p.vy * delta
-      p.life -= delta
-    }
-    g.particles = g.particles.filter(p => p.life > 0)
+    g.particles = g.particles
+      .map((particle) => ({
+        ...particle,
+        x: particle.x + particle.vx * delta,
+        y: particle.y + particle.vy * delta,
+        life: particle.life - delta,
+      }))
+      .filter((particle) => particle.life > 0)
   }
 
   const checkNearMiss = (delta: number) => {
@@ -736,21 +770,6 @@ export default function DodgePage() {
     if (!data) return
     endRun(key, getEndingTitle(key), data.description)
   }, [endRun])
-
-  const endSessionWithoutUnlock = useCallback((title: string, description: string, footerText?: string, messageTextValue?: string) => {
-    const g = gs.current
-    g.running = false
-    g.paused = false
-    g.pauseReason = 'none'
-    setPhase('result')
-    setResultInfo({
-      title,
-      description,
-      footer: footerText || '이번 세션은 참고 기록으로만 종료되었습니다.',
-    })
-    setUiMessage(messageTextValue || '60초 도달로 세션이 종료되었습니다. 다음 패턴에서 다른 기록을 확인해 보세요.')
-    saveScore(g.displayedTime, g.currentRoute, 'survived')
-  }, [saveScore])
 
   const hitTest = useCallback(() => {
     const g = gs.current
@@ -1050,21 +1069,9 @@ export default function DodgePage() {
         spawnRing(10 + pulse * 2, 145 + pulse * 20, 8, g.time * 0.32)
       }
     }
-  }, [])
+  }, [endRunByKey, spawnBullet, spawnHudDropBullet, spawnNormalPattern, spawnRing])
 
   // ─── Game loop ─────────────────────────────────────────
-
-  // ─── Roulette system ──────────────────────────────────
-  const FAKE_PRIZES = [
-    { emoji: '☕', name: '스타벅스 아메리카노', desc: '따뜻한 아메리카노 1잔 (Tall)', code: 'AFD-2026-COFFEE-XXXX' },
-    { emoji: '🍕', name: '도미노피자 50% 할인', desc: '라지 사이즈 50% 할인 쿠폰', code: 'AFD-2026-PIZZA-XXXX' },
-    { emoji: '🎬', name: 'CGV 영화 관람권', desc: '2D 일반 영화 1매', code: 'AFD-2026-MOVIE-XXXX' },
-    { emoji: '🍦', name: '배스킨라빈스 싱글콘', desc: '싱글 레귤러 아이스크림 1개', code: 'AFD-2026-ICECR-XXXX' },
-    { emoji: '🍔', name: '맥도날드 빅맥 세트', desc: '빅맥 + 후렌치후라이(M) + 콜라(M)', code: 'AFD-2026-BIGMC-XXXX' },
-    { emoji: '🧋', name: '공차 밀크티 L', desc: '타로 밀크티 + 펄 추가', code: 'AFD-2026-GONCH-XXXX' },
-    { emoji: '🎧', name: '에어팟 프로 3', desc: 'Apple AirPods Pro 3 (화이트)', code: 'AFD-2026-AIRPD-XXXX' },
-    { emoji: '💰', name: '현금 100만원', desc: '계좌로 즉시 입금 (세후)', code: 'AFD-2026-MONEY-XXXX' },
-  ]
 
   const startRoulette = useCallback(() => {
     const g = gs.current
@@ -1119,10 +1126,10 @@ export default function DodgePage() {
     setUiHudOpacity(g.currentRoute === 'hudDrop' && g.running && g.hudDropWave >= 0 ? 0.18 : 1)
   }, [])
 
-  const loop = useCallback((timestamp: number) => {
+  const loop = useCallback(function frame(timestamp: number) {
     const g = gs.current
     if (!g.running && !g.paused) { renderScene(); syncUI(); return }
-    if (g.paused) { renderScene(); syncUI(); animFrameRef.current = requestAnimationFrame(loop); return }
+    if (g.paused) { renderScene(); syncUI(); animFrameRef.current = requestAnimationFrame(frame); return }
     if (!g.lastTimestamp) g.lastTimestamp = timestamp
     let delta = (timestamp - g.lastTimestamp) / 1000
     if (delta > 0.033) delta = 0.033
@@ -1137,7 +1144,7 @@ export default function DodgePage() {
     }
     updatePlayer(delta)
     updateRoute(delta)
-    if (g.paused) { renderScene(); syncUI(); animFrameRef.current = requestAnimationFrame(loop); return }
+    if (g.paused) { renderScene(); syncUI(); animFrameRef.current = requestAnimationFrame(frame); return }
     updateBullets(delta)
     updateStars(delta)
     updateParticles(delta)
@@ -1145,8 +1152,8 @@ export default function DodgePage() {
     hitTest()
     renderScene()
     syncUI()
-    if (g.running) animFrameRef.current = requestAnimationFrame(loop)
-  }, [renderScene, syncUI, updateRoute, hitTest, finishRunAtTarget])
+    if (g.running) animFrameRef.current = requestAnimationFrame(frame)
+  }, [finishRunAtTarget, hitTest, renderScene, syncUI, updatePlayer, updateRoute])
 
   // ─── Actions ───────────────────────────────────────────
 
@@ -1167,8 +1174,6 @@ export default function DodgePage() {
     g.rewardWarningShown = false; g.rewardTrapPhase = 0
     g.bigBulletSpawned = false; g.bigBulletWarningShown = false; g.bigBulletTrapPhase = 0
     g.errorPulseCount = -1; g.errorTriggered = false
-    // Reset mascots for new route
-    delete mascotRef.current[g.currentRoute]
     if (g.currentRoute === 'error59') {
       setUiMessage('특별 할인! 이번엔 30초만 버티면 됩니다. 쉽죠? (만우절)')
     } else {
@@ -1430,30 +1435,34 @@ export default function DodgePage() {
     },
   }
 
-  // Pick a random mascot set based on route, stable per game
-  const mascotRef = useRef<Record<string, { bar: string; hud1: string; hud2: string; hud3: string }>>({})
-
-  const getMascots = useCallback((route: Route) => {
-    if (mascotRef.current[route]) return mascotRef.current[route]
-    const chars = [...MASCOT_CHARS]
-    // Shuffle to get 4 unique characters for 4 positions
-    for (let i = chars.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [chars[i], chars[j]] = [chars[j], chars[i]]
+  const getMascots = (route: Route, attempt: number) => {
+    let seed = Array.from(`${route}:${attempt}`).reduce(
+      (acc, char) => ((acc * 31) + char.charCodeAt(0)) >>> 0,
+      0
+    )
+    const nextRandom = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0
+      return seed / 0x100000000
     }
-    mascotRef.current[route] = { bar: chars[0], hud1: chars[1], hud2: chars[2], hud3: chars[3] }
-    return mascotRef.current[route]
-  }, [])
+    const chars = [...MASCOT_CHARS]
+    for (let i = chars.length - 1; i > 0; i--) {
+      const j = Math.floor(nextRandom() * (i + 1))
+      const current = chars[i]
+      chars[i] = chars[j]
+      chars[j] = current
+    }
+    return { bar: chars[0], hud1: chars[1], hud2: chars[2], hud3: chars[3] }
+  }
 
-  const getSpeech = useCallback((route: Route, char: string, timeVal: number, totalSteps: number) => {
+  const getSpeech = (route: Route, char: string, timeVal: number, totalSteps: number) => {
     const routeSpeeches = MASCOT_SPEECHES[route] || MASCOT_SPEECHES.normal
     const speeches = routeSpeeches[char] || routeSpeeches['🐹'] || ['...']
     const idx = Math.min(Math.floor((timeVal / totalSteps) * speeches.length), speeches.length - 1)
     return speeches[idx]
-  }, [])
+  }
 
   const timeNum = parseFloat(uiTime) || 0
-  const mascots = getMascots(uiRoute)
+  const mascots = getMascots(uiRoute, uiAttempts)
   const barSpeech = getSpeech(uiRoute, mascots.bar, timeNum, target)
   const hud1Speech = getSpeech(uiRoute, mascots.hud1, timeNum, target)
   const hud2Speech = getSpeech(uiRoute, mascots.hud2, timeNum, target)
