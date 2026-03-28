@@ -209,6 +209,27 @@ export default function DodgePage() {
     offsetY: 0,
   })
 
+  const getPlayBounds = useCallback(() => {
+    const canvas = canvasRef.current
+    if (!canvas || typeof window === 'undefined') {
+      return { minX: 10, maxX: WIDTH - 10, minY: 10, maxY: HEIGHT - 10 }
+    }
+
+    const rect = canvas.getBoundingClientRect()
+    const safeTopPx = window.innerWidth <= 640 ? 64 : 56
+    const safeBottomPx = window.innerWidth <= 640 ? 44 : 28
+    const safeSidePx = window.innerWidth <= 640 ? 12 : 20
+    const worldPerCssPxX = WIDTH / rect.width
+    const worldPerCssPxY = HEIGHT / rect.height
+
+    return {
+      minX: Math.max(10, safeSidePx * worldPerCssPxX),
+      maxX: Math.min(WIDTH - 10, WIDTH - safeSidePx * worldPerCssPxX),
+      minY: Math.max(10, safeTopPx * worldPerCssPxY),
+      maxY: Math.min(HEIGHT - 10, HEIGHT - safeBottomPx * worldPerCssPxY),
+    }
+  }, [])
+
   const [phase, setPhase] = useState<Phase>('idle')
   const [collected, setCollected] = useState<string[]>([])
   const [uiMessage, setUiMessage] = useState('살아남으세요. 그게 전부입니다. (아마도)')
@@ -609,11 +630,12 @@ export default function DodgePage() {
   const updatePlayer = (delta: number) => {
     const g = gs.current
     const target = getPlayerTarget()
+    const bounds = getPlayBounds()
     const lerp = 1 - Math.pow(0.000001, delta)
     g.playerX += (target.x - g.playerX) * lerp
     g.playerY += (target.y - g.playerY) * lerp
-    g.playerX = Math.max(g.playerRadius, Math.min(WIDTH - g.playerRadius, g.playerX))
-    g.playerY = Math.max(g.playerRadius, Math.min(HEIGHT - g.playerRadius, g.playerY))
+    g.playerX = Math.max(bounds.minX + g.playerRadius, Math.min(bounds.maxX - g.playerRadius, g.playerX))
+    g.playerY = Math.max(bounds.minY + g.playerRadius, Math.min(bounds.maxY - g.playerRadius, g.playerY))
     // Trail
     g.trail.unshift({ x: g.playerX, y: g.playerY, alpha: 1 })
     if (g.trail.length > 12) g.trail.pop()

@@ -36,7 +36,7 @@
 /* ─── Top HUD ─────────────────────────────────── */
 .topHud {
   position: absolute;
-  left: 20px; right: 20px; top: 20px;
+  left: 20px; right: 20px; top: calc(env(safe-area-inset-top, 0px) + 20px);
   display: flex;
   justify-content: space-between;
   gap: 12px;
@@ -105,7 +105,7 @@
 /* ─── Bottom progress bar ─────────────────────── */
 .bottomBar {
   position: absolute;
-  left: 20px; right: 20px; bottom: 20px;
+  left: 20px; right: 20px; bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
   pointer-events: none;
 }
 
@@ -559,8 +559,8 @@
     object-fit: cover;
   }
 
-  .topHud { left: 8px; right: 8px; top: 8px; gap: 4px; }
-  .bottomBar { left: 8px; right: 8px; bottom: 8px; }
+  .topHud { left: 8px; right: 8px; top: calc(env(safe-area-inset-top, 0px) + 8px); gap: 4px; }
+  .bottomBar { left: 8px; right: 8px; bottom: calc(env(safe-area-inset-bottom, 0px) + 8px); }
   .hudGroup { gap: 4px; }
   .hudPill { padding: 4px 8px; font-size: 10px; }
   .progressTime { font-size: 18px; min-width: 60px; }
