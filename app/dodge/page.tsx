@@ -45,7 +45,7 @@ interface GameState {
   currentRoute: Route; lastTimestamp: number
   darknessAlpha: number; paused: boolean; pauseReason: PauseReason
   darknessAdjusted: boolean; darknessPauseTriggered: boolean
-  instantTriggered: boolean; hopeTrapPhase: number; patternWaveIndex: number
+  instantTriggered: boolean; instantLastFire: number; hopeTrapPhase: number; patternWaveIndex: number
   hudDropWave: number; hudDropWarningShown: boolean
   growthWarningShown: boolean; driftWarningShown: boolean
   wallPhase: number; wallGapIndex: number
@@ -186,7 +186,7 @@ function createInitialGameState(): GameState {
     currentRoute: 'normal', lastTimestamp: 0,
     darknessAlpha: 0, paused: false, pauseReason: 'none',
     darknessAdjusted: false, darknessPauseTriggered: false,
-    instantTriggered: false, hopeTrapPhase: 0, patternWaveIndex: -1,
+    instantTriggered: false, instantLastFire: 0, hopeTrapPhase: 0, patternWaveIndex: -1,
     hudDropWave: -1, hudDropWarningShown: false,
     growthWarningShown: false, driftWarningShown: false,
     wallPhase: 0, wallGapIndex: 0,
@@ -759,8 +759,9 @@ export default function DodgePage() {
       if (g.time < 0.7) setUiHudHint('잠깐만요 준비 중...')
       else if (g.time < 1.05) setUiHudHint('거짓말이었습니다')
       else setUiHudHint('이미 늦었습니다 ㅎㅎ')
-      if (g.time > 0.92 && !g.instantTriggered) {
+      if (g.time > 0.92 && (!g.instantTriggered || g.time - g.instantLastFire >= 5)) {
         g.instantTriggered = true
+        g.instantLastFire = g.time
         const targetX = Math.max(160, Math.min(WIDTH - 160, g.playerX))
         for (let i = -2; i <= 2; i++) spawnBullet(targetX + i * 36, -90, 0, 1680, 18, 'rgba(251,113,133,0.98)')
         spawnBullet(-90, g.playerY - 24, 1320, 0, 16, 'rgba(251,191,36,0.96)')
@@ -1080,7 +1081,7 @@ export default function DodgePage() {
     g.currentRoute = ROUTES[Math.floor(Math.random() * ROUTES.length)]
     g.lastTimestamp = 0; g.darknessAlpha = 0; g.paused = false; g.pauseReason = 'none'
     g.darknessAdjusted = false; g.darknessPauseTriggered = false
-    g.instantTriggered = false; g.hopeTrapPhase = 0; g.patternWaveIndex = -1
+    g.instantTriggered = false; g.instantLastFire = 0; g.hopeTrapPhase = 0; g.patternWaveIndex = -1
     g.hudDropWave = -1; g.hudDropWarningShown = false
     g.growthWarningShown = false; g.driftWarningShown = false
     g.wallPhase = 0; g.wallGapIndex = 0

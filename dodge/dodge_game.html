@@ -466,6 +466,7 @@
       darknessAdjusted: false,
       darknessPauseTriggered: false,
       instantTriggered: false,
+      instantLastFire: 0,
       hopeTrapPhase: 0,
       patternWaveIndex: -1,
       hudDropWave: -1,
@@ -644,6 +645,7 @@
       state.darknessAdjusted = false;
       state.darknessPauseTriggered = false;
       state.instantTriggered = false;
+      state.instantLastFire = 0;
       state.hopeTrapPhase = 0;
       state.patternWaveIndex = -1;
       state.hudDropWave = -1;
@@ -878,8 +880,9 @@
         } else {
           hudHint.textContent = '회피 경로가 열리기 전에 닫힙니다';
         }
-        if (state.time > 0.92 && !state.instantTriggered) {
+        if (state.time > 0.92 && (!state.instantTriggered || state.time - state.instantLastFire >= 5)) {
           state.instantTriggered = true;
+          state.instantLastFire = state.time;
           const targetX = Math.max(160, Math.min(WIDTH - 160, state.playerX));
           for (let i = -2; i <= 2; i += 1) {
             spawnBullet(targetX + i * 36, -90, 0, 1680, 18, 'rgba(251,113,133,0.98)');
